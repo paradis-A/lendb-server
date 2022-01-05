@@ -1,42 +1,30 @@
-// import Save from "./save"
-import type Request from "hyper-express/types/components/http/Request";
-import type Response from "hyper-express/types/components/http/Response";
-import cuid from "cuid";
-import { AceBase } from "acebase";
-import { iRefHook, iAuthHook, iAuthEvent, iRefEvent } from "./hook";
-import type Emittery from "emittery";
-import { DataReferenceQuery } from "acebase-core";
-import { cloneDeep, isObject } from "lodash";
-import Auth, { Account } from "./auth";
-import fs from "graceful-fs"
-export default class Serializer {
-    protected acebase: AceBase;
-    protected emitter: Emittery;
-    protected refHooks: iRefHook[];
-    protected authHook: iAuthHook[];
-    protected auth: Auth;
-    constructor(
-        acebaseInstance: AceBase,
-        emitteryInstance: Emittery,
-        refHook: iRefHook[],
-        authHook: iAuthHook[],
-        auth?: Auth
-    ) {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const cuid_1 = __importDefault(require("cuid"));
+const lodash_1 = require("lodash");
+const graceful_fs_1 = __importDefault(require("graceful-fs"));
+class Serializer {
+    acebase;
+    emitter;
+    refHooks;
+    authHook;
+    auth;
+    constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth) {
         this.acebase = acebaseInstance;
         this.emitter = emitteryInstance;
         this.refHooks = refHook;
         this.authHook = authHook;
         this.auth = auth;
     }
-
-    async Execute(
-        payload: any,
-        server?: { req?: Request; res?: Response }
-    ): Promise<any> {
+    async Execute(payload, server) {
         try {
             let result = {};
             if (Array.isArray(payload)) {
-            } else {
+            }
+            else {
                 const operations = [
                     "save",
                     "load",
@@ -44,10 +32,8 @@ export default class Serializer {
                     "destroy",
                     "exists",
                 ];
-                if (
-                    !payload?.operation ||
-                    !operations.includes(payload?.operation)
-                ) {
+                if (!payload?.operation ||
+                    !operations.includes(payload?.operation)) {
                     return Promise.reject("Error: Invalid operation.");
                 }
                 let transaction = payload;
@@ -73,38 +59,30 @@ export default class Serializer {
                 }
             }
             return Promise.resolve(result);
-        } catch (error) {
+        }
+        catch (error) {
             return Promise.reject(error);
         }
     }
-
-    protected GetHook(event: iAuthEvent | iRefEvent, ref?: string) {
+    GetHook(event, ref) {
         if (ref && typeof ref == "string" && event) {
             return this.refHooks.find((h) => h.ref == ref && h.event == event);
-        } else if (event && !ref) {
+        }
+        else if (event && !ref) {
             return this.authHook.find((a) => a.event == event);
         }
     }
-
-    protected ExecuteHook(
-        event: iAuthEvent | iRefEvent,
-        ref: string,
-        data: any,
-        req?: Request,
-        res?: Response,
-        user?: Account
-    ) {
+    ExecuteHook(event, ref, data, req, res, user) {
         if (ref && typeof ref == "string" && event) {
             this.refHooks
                 .find((h) => h.ref == ref && h.event == event)
                 ?.callback(data, req, res, user);
-        } else if (event && !ref) {
+        }
+        else if (event && !ref) {
             this.authHook.find((a) => a.event == event)?.callback(data);
         }
     }
-
-
-    protected getData(transaction: any) {
+    getData(transaction) {
         let temp = transaction;
         delete temp.operation;
         delete temp._page;
@@ -121,32 +99,30 @@ export default class Serializer {
         delete temp.childPropsNames;
         const entries = Object.entries(transaction);
         for (const entry of entries) {
-            const key = entry[0]
-            const value = entry[0]
-            if(Array.isArray(value) && !value.length){
-                delete transaction[key]
+            const key = entry[0];
+            const value = entry[0];
+            if (Array.isArray(value) && !value.length) {
+                delete transaction[key];
             }
         }
         return temp;
     }
-    
-    protected async Destroy(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ) {
+    async Destroy(transaction, server) {
         try {
             //! Must intercept the ref when they query keys that dont belong to them
             //! when ACL implemented
-            let user: Account = null;
+            let user = null;
             if (this.auth?.enabled) {
                 let sentToken = server?.req.header("token");
                 if (sentToken) {
                     try {
                         user = await this.auth.GetUser(sentToken);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         return Promise.reject("Error: Access Denied");
                     }
-                } else {
+                }
+                else {
                     return Promise.reject("Error: Access Denied");
                 }
             }
@@ -154,15 +130,11 @@ export default class Serializer {
             let ref = this.sanitizeRefference(transaction?.ref);
             //secure refs
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
-                return Promise.reject(
-                    "Error: Cannot access secured refferences use  instance.User() instead."
-                );
+                return Promise.reject("Error: Cannot access secured refferences use  instance.User() instead.");
             }
             //wilcard path
             if (ref.includes("*")) {
-                return Promise.reject(
-                    "Error: Commiting or deleting must not use wildcard within LenObject instance not allowed."
-                );
+                return Promise.reject("Error: Commiting or deleting must not use wildcard within LenObject instance not allowed.");
             }
             //check if path have cuid
             // if (singular) {
@@ -185,37 +157,35 @@ export default class Serializer {
             if (!singular) {
                 const splitted = ref.split("/");
                 if (splitted.length > 1) {
-                    if (cuid.isCuid(splitted[splitted.length - 1])) {
+                    if (cuid_1.default.isCuid(splitted[splitted.length - 1])) {
                         splitted.pop();
                         ref = splitted.join("/");
                     }
                 }
             }
             // check cuid key
-            if (!cuid.isCuid(key) && !singular) {
-                return Promise.reject(
-                    "Error: Invalid key for the collection. Key: " + key
-                );
+            if (!cuid_1.default.isCuid(key) && !singular) {
+                return Promise.reject("Error: Invalid key for the collection. Key: " + key);
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
-            const executeHook =
-                hook == undefined || (hook && typeof hook == "boolean");
-            const executeEmit =
-                emit == undefined || (typeof emit == "boolean" && emit);
+            const executeHook = hook == undefined || (hook && typeof hook == "boolean");
+            const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
             let instance = this.acebase.ref(refference);
-            let oldData: any = (await instance.get()).val();
+            let oldData = (await instance.get()).val();
             if (singular) {
                 oldData = (await this.acebase.ref(ref).get()).val();
-            } else {
-                if (key && cuid.isCuid(key) && ref && typeof ref == "string") {
+            }
+            else {
+                if (key && cuid_1.default.isCuid(key) && ref && typeof ref == "string") {
                     let splitted = ref.split("/");
                     const last = splitted[splitted.length - 1];
-                    if (cuid.isCuid(last)) {
+                    if (cuid_1.default.isCuid(last)) {
                         splitted[splitted.length - 1] = key;
-                    } else {
+                    }
+                    else {
                         splitted.push(key);
                     }
                     const joined = splitted.join("/");
@@ -223,39 +193,24 @@ export default class Serializer {
                 }
             }
             if (executeHook)
-                this.ExecuteHook(
-                    "beforeDestroy",
-                    hookRef,
-                    oldData,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook("beforeDestroy", hookRef, oldData, server?.req, server?.res, user);
             await this.acebase.ref(refference).remove();
             if (executeHook)
-                this.ExecuteHook(
-                    "afterDestroy",
-                    hookRef,
-                    oldData,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook("afterDestroy", hookRef, oldData, server?.req, server?.res, user);
             //! access level permission when emitting for client side
-            if(executeEmit){
-                this.emitter.emit("destroy:"+hookRef, oldData);
+            if (executeEmit) {
+                this.emitter.emit("destroy:" + hookRef, oldData);
             }
             return Promise.resolve(oldData);
-        } catch (error) {
+        }
+        catch (error) {
             return Promise.reject(error);
         }
     }
-
     // protected async Exists(transaction: any) {
     //     try {
     //         const { key, ref, singular } = transaction;
     //         let result = false;
-
     //         if (singular) {
     //             result = await this.acebase.ref(ref).exists();
     //         } else {
@@ -272,24 +227,22 @@ export default class Serializer {
     //         }
     //     } catch (error) {}
     // }
-
-    protected async Load(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ) {
+    async Load(transaction, server) {
         try {
             //! Must intercept the ref when the keys that dont belong to them
             //! when ACL implemented
-            let user: Account = null;
+            let user = null;
             if (this.auth?.enabled) {
                 let sentToken = server?.req.header("token");
                 if (sentToken) {
                     try {
                         user = await this.auth.GetUser(sentToken);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         return Promise.reject("Error: Access Denied");
                     }
-                } else {
+                }
+                else {
                     return Promise.reject("Error: Access Denied");
                 }
             }
@@ -297,28 +250,20 @@ export default class Serializer {
             let ref = this.sanitizeRefference(transaction?.ref);
             let result = {};
             const hook = eventHandles?.hook;
-            const executeHook =
-                hook == undefined || (hook && typeof hook == "boolean");
-
+            const executeHook = hook == undefined || (hook && typeof hook == "boolean");
             if (executeHook)
-                this.ExecuteHook(
-                    "beforeLoad",
-                    this.toWildCardPath(ref),
-                    {},
-                    server?.req,
-                    server?.res,
-                    user
-                );
-
+                this.ExecuteHook("beforeLoad", this.toWildCardPath(ref), {}, server?.req, server?.res, user);
             if (singular) {
                 result = (await this.acebase.ref(ref).get()).val();
-            } else {
-                if (key && cuid.isCuid(key) && ref && typeof ref == "string") {
+            }
+            else {
+                if (key && cuid_1.default.isCuid(key) && ref && typeof ref == "string") {
                     let splitted = ref.split("/");
                     const last = splitted[splitted.length - 1];
-                    if (cuid.isCuid(last)) {
+                    if (cuid_1.default.isCuid(last)) {
                         splitted[splitted.length - 1] = key;
-                    } else {
+                    }
+                    else {
                         splitted.push(key);
                     }
                     const joined = splitted.join("/");
@@ -326,39 +271,30 @@ export default class Serializer {
                     result = (await this.acebase.ref(joined).get()).val();
                 }
             }
-
             if (executeHook)
-                this.ExecuteHook(
-                    "afterLoad",
-                    this.toWildCardPath(ref),
-                    {},
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook("afterLoad", this.toWildCardPath(ref), {}, server?.req, server?.res, user);
             return Promise.resolve(result);
-        } catch (error) {
+        }
+        catch (error) {
             return Promise.reject(error);
         }
     }
-
-    protected async Save(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ) {
+    async Save(transaction, server) {
         try {
             //! Must intercept the ref when they query keys that dont belong to them
             //! when ACL implemented
-            let user: Account = null;
+            let user = null;
             if (this.auth?.enabled) {
                 let sentToken = server?.req.header("token");
                 if (sentToken) {
                     try {
                         user = await this.auth.GetUser(sentToken);
-                    } catch (error) {
+                    }
+                    catch (error) {
                         return Promise.reject("Error: Access Denied");
                     }
-                } else {
+                }
+                else {
                     return Promise.reject("Error: Access Denied");
                 }
             }
@@ -366,9 +302,7 @@ export default class Serializer {
             let ref = this.sanitizeRefference(transaction.ref);
             //wilcard path
             if (ref.includes("*")) {
-                return Promise.reject(
-                    "Error: Adding or Updating must not contain wildcard path"
-                );
+                return Promise.reject("Error: Adding or Updating must not contain wildcard path");
             }
             //check if path have cuid
             // if (singular) {
@@ -380,81 +314,58 @@ export default class Serializer {
             //     }
             // }
             //cuid key check
-            if (!cuid.isCuid(key) && !singular) {
+            if (!cuid_1.default.isCuid(key) && !singular) {
                 return Promise.reject("Error: Invalid key for the collection.");
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
-            const executeHook =
-                (hook == undefined) || (typeof hook == "boolean" && hook);
-            const executeEmit =
-                (emit == undefined) || (typeof emit == "boolean" && emit);
-            console.log("Execute hook: " + executeHook + "  emit: " + executeEmit)
+            const executeHook = (hook == undefined) || (typeof hook == "boolean" && hook);
+            const executeEmit = (emit == undefined) || (typeof emit == "boolean" && emit);
+            console.log("Execute hook: " + executeHook + "  emit: " + executeEmit);
             let data = this.getData(Object.assign({}, transaction));
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
             !singular || delete data.key;
             let instance = this.acebase.ref(refference);
             const exists = await instance.exists();
-            if (exists) data.updated_at = new Date(Date.now());
-            else data.created_at = new Date(Date.now());
-            const event: {
-                before: iAuthEvent | iRefEvent;
-                after: iAuthEvent | iRefEvent;
-            } = {
+            if (exists)
+                data.updated_at = new Date(Date.now());
+            else
+                data.created_at = new Date(Date.now());
+            const event = {
                 before: exists ? "beforeUpdate" : "beforeAdd",
                 after: exists ? "afterUpdate" : "afterAdd",
             };
             if (executeHook) {
-                this.ExecuteHook(
-                    event.before,
-                    hookRef,
-                    data,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
             }
-
-            if (exists) instance.update(data);
-            else instance.set(data);
-
+            if (exists)
+                instance.update(data);
+            else
+                instance.set(data);
             await this.autoIndex(hookRef, data);
             let returnData = (await instance.get()).val();
             if (executeHook) {
-                this.ExecuteHook(
-                    event.after,
-                    hookRef,
-                    data,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook(event.after, hookRef, data, server?.req, server?.res, user);
             }
             //! access level permission when emitting for client side
             if (executeEmit) {
                 if (exists) {
-                    console.log(
-                        "Emit ref from server is: " + "update:" + hookRef,
-                        data
-                    );
+                    console.log("Emit ref from server is: " + "update:" + hookRef, data);
                     this.emitter.emit("update:" + hookRef, data);
-                } else {
-                    console.log(
-                        "Emit ref from server is: " + "add:" + hookRef,
-                        data
-                    );
+                }
+                else {
+                    console.log("Emit ref from server is: " + "add:" + hookRef, data);
                     this.emitter.emit("add:" + hookRef, data);
                 }
             }
             return Promise.resolve(returnData);
-        } catch (error) {
+        }
+        catch (error) {
             return Promise.reject(error);
         }
     }
-
-
-    async Upload(req: Request, res: Response){
+    async Upload(req, res) {
         try {
             //@ts-ignore
             // await req.session.start();
@@ -463,125 +374,115 @@ export default class Serializer {
                     let file = arrbuff.file;
                     if (file) {
                         let tempFilename = file?.name;
-                        if (
-                            typeof tempFilename == "string" &&
-                            tempFilename.split("-$-").length == 2
-                        ) {
+                        if (typeof tempFilename == "string" &&
+                            tempFilename.split("-$-").length == 2) {
                             let splitted = tempFilename.split("-$-");
                             let key = splitted[0];
                             let filename = splitted[1];
-                            let ext = filename.substring(filename.lastIndexOf(".")) 
-                            let savename = cuid()
-                            ext = ext.split(" ").join("")
-                            if(ext != filename) savename = savename + ext
-                            savename = savename.split(" ").join("")
+                            let ext = filename.substring(filename.lastIndexOf("."));
+                            let savename = (0, cuid_1.default)();
+                            ext = ext.split(" ").join("");
+                            if (ext != filename)
+                                savename = savename + ext;
+                            savename = savename.split(" ").join("");
                             let props = {
                                 key,
                                 filename,
                                 savename,
                             };
-                            if (!fs.existsSync("./uploads")) {
+                            if (!graceful_fs_1.default.existsSync("./uploads")) {
                                 //@ts-ignore
-                                fs.mkdir("./uploads/", () => {});
+                                graceful_fs_1.default.mkdir("./uploads/", () => { });
                             }
-                            if (
-                                await this.acebase
-                                    .ref("__uploads__/" + key)
-                                    .exists()
-                            ) {
+                            if (await this.acebase
+                                .ref("__uploads__/" + key)
+                                .exists()) {
                                 res.json({ key, filename, url: savename });
                             }
                             await arrbuff.write("./uploads/" + savename);
                             await this.acebase
                                 .ref("__uploads__/" + key)
                                 .set(props);
-                            res.end(
-                                JSON.stringify({
-                                    key,
-                                    filename,
-                                    url: savename,
-                                })
-                            );
-                        } else {
+                            res.end(JSON.stringify({
+                                key,
+                                filename,
+                                url: savename,
+                            }));
+                        }
+                        else {
                             throw new Error("Error: Invalid File");
                         }
-                    } else {
+                    }
+                    else {
                         res.sendStatus(500);
                         res.send("Error: file required");
                     }
                     // await arrbuff.write("uploads/" + key + "." + type)
-                } catch (error) {
+                }
+                catch (error) {
                     throw Error(error);
                 }
             });
-        } catch (error) {
+        }
+        catch (error) {
             res.end(error);
             throw error;
         }
     }
-
-
-
-
-    protected async autoIndex(path: string, data: any) {
+    async autoIndex(path, data) {
         try {
-            if (isObject(data) && path.includes("/")) {
+            if ((0, lodash_1.isObject)(data) && path.includes("/")) {
                 const dataArr = Object.entries(data);
                 for (const arr of dataArr) {
                     const field = arr[0];
                     const value = arr[1];
                     path = this.toWildCardPath(path);
-                    if (isObject(value)) {
+                    if ((0, lodash_1.isObject)(value)) {
                         await this.autoIndex(path + "/" + field, value);
-                    } else if (Array.isArray(value)) {
+                    }
+                    else if (Array.isArray(value)) {
                         this.acebase.indexes.create(path, field, {
                             type: "array",
                         });
-                    } else {
+                    }
+                    else {
                         this.acebase.indexes.create(path, field);
                     }
                 }
             }
             return Promise.resolve(true);
-        } catch (error) {
+        }
+        catch (error) {
             return Promise.reject(error);
         }
     }
-
-    protected toWildCardPath(ref: string) {
+    toWildCardPath(ref) {
         return ref
             .split("/")
             .map((r) => {
-                return cuid.isCuid(r) ? "*" : r;
-            })
+            return cuid_1.default.isCuid(r) ? "*" : r;
+        })
             .join("/");
     }
-
-    protected sanitizeRefference(ref: string) {
+    sanitizeRefference(ref) {
         if (ref.startsWith("/")) {
             ref = ref.substring(1);
         }
-        if (ref.endsWith("/")) ref = ref.substring(0, ref.length - 1);
+        if (ref.endsWith("/"))
+            ref = ref.substring(0, ref.length - 1);
         return ref;
     }
-
-    protected async Query(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ): Promise<{ data: any[]; count: number }> {
+    async Query(transaction, server) {
         try {
             const { ref, hook } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
-                return Promise.reject(
-                    "Error: cannot access secured refferences use  instance.User() instead."
-                );
+                return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
-            const executeHook =
-                hook == undefined || (typeof hook == "boolean" && hook);
+            const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             if (executeHook) {
-                this.ExecuteHook("beforeFind",  ref, {} , server?.req, server?.res);
+                this.ExecuteHook("beforeFind", ref, {}, server?.req, server?.res);
             }
-            let clone = cloneDeep(transaction);
+            let clone = (0, lodash_1.cloneDeep)(transaction);
             let queryRef = this.acebase.query(ref);
             queryRef = this.applyFilters(clone, queryRef);
             let count = await queryRef.count();
@@ -590,14 +491,14 @@ export default class Serializer {
                 this.ExecuteHook("afterFind", ref, {}, server?.req, server?.res);
             }
             return { data, count };
-        } catch (error) {
+        }
+        catch (error) {
             if (error?.message.startsWith("Error: This wildcard path query on"))
                 return Promise.resolve({ data: [], count: 0 });
             throw new Error(error);
         }
     }
-
-    applyFilters(payload: any, queryRef: DataReferenceQuery) {
+    applyFilters(payload, queryRef) {
         //! Must intercept the filters when they query keys that dont belong to them
         //! when ACL implemented
         if (Array.isArray(payload?.filters) && payload?.filters.length) {
@@ -610,8 +511,10 @@ export default class Serializer {
         // }
         if (Array.isArray(payload?.sorts)) {
             payload.sorts.forEach((s) => {
-                if (s.length > 1) queryRef.sort(s[0], s[1]);
-                else queryRef.sort(s[0]);
+                if (s.length > 1)
+                    queryRef.sort(s[0], s[1]);
+                else
+                    queryRef.sort(s[0]);
             });
         }
         queryRef.take(payload?.take || 100);
@@ -619,10 +522,13 @@ export default class Serializer {
         if (payload?.page && payload?.page > 1) {
             if (payload?.take)
                 queryRef.skip((payload?.page - 1) * payload?.take);
-            else queryRef.skip((payload?.page - 1) * 100);
-        } else {
+            else
+                queryRef.skip((payload?.page - 1) * 100);
+        }
+        else {
             queryRef.skip(0);
         }
         return queryRef;
     }
 }
+exports.default = Serializer;

@@ -1,13 +1,12 @@
 import type LenQuery from "./query";
 import Request from "hyper-express/types/components/http/Request";
-import Response from "hyper-express/types/components/http/Request";
+import Response from "hyper-express/types/components/http/Response";
 export let Authhooks: iAuthHook[] = [];
 export let RefHooks: iRefHook[] = [];
 import {Account} from "./auth"
 export default class Hook {
     protected _refhooks: iRefHook[] = [];
     protected _authHooks: iAuthHook[] = [];
-
     protected addOrReplaceRefHook(hook?: iRefHook) {
         const { ref: table, event } = hook;
         const el = this._refhooks.findIndex(
@@ -19,7 +18,7 @@ export default class Hook {
             this.refHooks[el] = hook;
         }
     }
-
+    
     protected addOrReplaceAuthHook(hook?: iAuthHook) {
 
     }
