@@ -8,3 +8,4 @@ class Account {
     token;
 }
 exports.Account = Account;
+//# sourceMappingURL=account.js.map

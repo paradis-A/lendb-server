@@ -74,3 +74,4 @@ function RegisterHook(hook) {
     exports.Authhooks = temp.authHooks;
 }
 exports.RegisterHook = RegisterHook;
+//# sourceMappingURL=hook.js.map

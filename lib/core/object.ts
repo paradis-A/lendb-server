@@ -74,7 +74,9 @@ export default class LenObject {
         return clone;
     }
 
-
+    protected watch(){
+        
+    }
 
     /**
      * Loads the data from the database with key provided 

@@ -9,6 +9,7 @@ export default class LenQuery {
     protected operation: string;
     protected exclusion: string[];
     protected inclusion: string[];
+    protected searchString: string;
     protected sorts: any[];
     protected serializer: Serializer;
     protected emitter: Emittery;
@@ -34,6 +35,7 @@ export default class LenQuery {
     sort(field: string, asc?: boolean): void;
     exclude(fields: string[]): void;
     include(fields: string[]): void;
+    search(word: string): this;
     protected stripNonQuery(clone: this): this;
     watch(cb: (event: iLiveQuery) => void, fetchOptions?: {
         page?: number;

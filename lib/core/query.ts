@@ -13,6 +13,7 @@ export default class LenQuery {
     protected operation: string;
     protected exclusion: string[] = [];
     protected inclusion: string[] = [];
+    protected searchString: string;
     protected sorts: any[] = [];
     protected serializer: Serializer;
     protected emitter: Emittery;
@@ -124,6 +125,11 @@ export default class LenQuery {
         this.inclusion = fields;
     }
 
+    search(word:string){
+        this.searchString = word;
+        return this
+    }
+
     protected stripNonQuery(clone: this) {
         delete clone.serializer;
         delete clone.emitter;
@@ -168,7 +174,7 @@ export default class LenQuery {
             })
             .join("/");
     }
-
+    
     async fetch(
         options: { page?: number; limit?: number; hook?: boolean } = {
             hook: false,
@@ -190,7 +196,7 @@ export default class LenQuery {
                     return Normalize(data)
                 })
             }
-
+            
             res.data = tempData
             return Promise.resolve(res);
         } catch (error) {

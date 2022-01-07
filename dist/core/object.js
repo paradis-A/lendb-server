@@ -144,3 +144,4 @@ class LenObject {
     }
 }
 exports.default = LenObject;
+//# sourceMappingURL=object.js.map

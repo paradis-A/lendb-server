@@ -6,27 +6,34 @@ import { AceBase } from "acebase";
 import { iRefHook, iAuthHook, iAuthEvent, iRefEvent } from "./hook";
 import type Emittery from "emittery";
 import { DataReferenceQuery } from "acebase-core";
-import { cloneDeep, isObject } from "lodash";
+import { cloneDeep, isDate, isObject } from "lodash";
 import Auth, { Account } from "./auth";
-import fs from "graceful-fs"
+import type { ObjectLink } from "./";
+const SEARCH_FIELD = "__search_field__";
 export default class Serializer {
     protected acebase: AceBase;
     protected emitter: Emittery;
     protected refHooks: iRefHook[];
     protected authHook: iAuthHook[];
     protected auth: Auth;
+    protected links: ObjectLink[];
+    protected searchables: { ref: string; fields: string }[];
     constructor(
         acebaseInstance: AceBase,
         emitteryInstance: Emittery,
         refHook: iRefHook[],
         authHook: iAuthHook[],
-        auth?: Auth
+        auth?: Auth,
+        link?: ObjectLink[],
+        searchables?: { ref: string; fields: string }[]
     ) {
         this.acebase = acebaseInstance;
         this.emitter = emitteryInstance;
         this.refHooks = refHook;
         this.authHook = authHook;
+        this.links = link;
         this.auth = auth;
+        this.searchables = searchables;
     }
 
     async Execute(
@@ -103,7 +110,6 @@ export default class Serializer {
         }
     }
 
-
     protected getData(transaction: any) {
         let temp = transaction;
         delete temp.operation;
@@ -121,15 +127,15 @@ export default class Serializer {
         delete temp.childPropsNames;
         const entries = Object.entries(transaction);
         for (const entry of entries) {
-            const key = entry[0]
-            const value = entry[0]
-            if(Array.isArray(value) && !value.length){
-                delete transaction[key]
+            const key = entry[0];
+            const value = entry[0];
+            if (Array.isArray(value) && !value.length) {
+                delete transaction[key];
             }
         }
         return temp;
     }
-    
+
     protected async Destroy(
         transaction: any,
         server: { req?: Request; res?: Response }
@@ -242,36 +248,36 @@ export default class Serializer {
                     user
                 );
             //! access level permission when emitting for client side
-            if(executeEmit){
-                this.emitter.emit("destroy:"+hookRef, oldData);
+            if (executeEmit) {
+                this.emitter.emit("destroy:" + hookRef, oldData);
             }
+
             return Promise.resolve(oldData);
         } catch (error) {
             return Promise.reject(error);
         }
     }
 
-    // protected async Exists(transaction: any) {
-    //     try {
-    //         const { key, ref, singular } = transaction;
-    //         let result = false;
+    protected async Exists(transaction: any) {
+        try {
+            const { key, ref, singular } = transaction;
+            let result = false;
 
-    //         if (singular) {
-    //             result = await this.acebase.ref(ref).exists();
-    //         } else {
-    //             let splitted = ref.split("/");
-    //             const last = splitted[splitted.length - 1];
-    //             if (cuid.isCuid(last)) {
-    //                 splitted[splitted.length - 1] = key;
-    //             } else {
-    //                 splitted.push(key);
-    //             }
-    //             const joined = splitted.join("/");
-    //             console.log(joined);
-    //             result = await this.acebase.ref(joined).exists();
-    //         }
-    //     } catch (error) {}
-    // }
+            if (singular) {
+                result = await this.acebase.ref(ref).exists();
+            } else {
+                let splitted = ref.split("/");
+                const last = splitted[splitted.length - 1];
+                if (cuid.isCuid(last)) {
+                    splitted[splitted.length - 1] = key;
+                } else {
+                    splitted.push(key);
+                }
+                const joined = splitted.join("/");
+                result = await this.acebase.ref(joined).exists();
+            }
+        } catch (error) {}
+    }
 
     protected async Load(
         transaction: any,
@@ -299,7 +305,6 @@ export default class Serializer {
             const hook = eventHandles?.hook;
             const executeHook =
                 hook == undefined || (hook && typeof hook == "boolean");
-
             if (executeHook)
                 this.ExecuteHook(
                     "beforeLoad",
@@ -386,10 +391,12 @@ export default class Serializer {
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
             const executeHook =
-                (hook == undefined) || (typeof hook == "boolean" && hook);
+                hook == undefined || (typeof hook == "boolean" && hook);
             const executeEmit =
-                (emit == undefined) || (typeof emit == "boolean" && emit);
-            console.log("Execute hook: " + executeHook + "  emit: " + executeEmit)
+                emit == undefined || (typeof emit == "boolean" && emit);
+            console.log(
+                "Execute hook: " + executeHook + "  emit: " + executeEmit
+            );
             let data = this.getData(Object.assign({}, transaction));
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
@@ -415,11 +422,17 @@ export default class Serializer {
                     user
                 );
             }
-
+            if (SEARCH_FIELD in data) {
+                delete data[SEARCH_FIELD];
+            }
+            this.ProcessLink(refference, key, data);
+            let searchField = this.generateSearchString(data);
+            if (searchField) data[SEARCH_FIELD] = searchField;
+            await this.ProcessLink(ref,key,data)
             if (exists) instance.update(data);
             else instance.set(data);
-
             await this.autoIndex(hookRef, data);
+            delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
                 this.ExecuteHook(
@@ -453,8 +466,7 @@ export default class Serializer {
         }
     }
 
-
-    async Upload(req: Request, res: Response){
+    async Upload(req: Request, res: Response, uploadPath: string) {
         try {
             //@ts-ignore
             // await req.session.start();
@@ -470,20 +482,18 @@ export default class Serializer {
                             let splitted = tempFilename.split("-$-");
                             let key = splitted[0];
                             let filename = splitted[1];
-                            let ext = filename.substring(filename.lastIndexOf(".")) 
-                            let savename = cuid()
-                            ext = ext.split(" ").join("")
-                            if(ext != filename) savename = savename + ext
-                            savename = savename.split(" ").join("")
+                            let ext = filename.substring(
+                                filename.lastIndexOf(".")
+                            );
+                            let savename = cuid();
+                            ext = ext.split(" ").join("");
+                            if (ext != filename) savename = savename + ext;
+                            savename = savename.split(" ").join("");
                             let props = {
                                 key,
                                 filename,
                                 savename,
                             };
-                            if (!fs.existsSync("./uploads")) {
-                                //@ts-ignore
-                                fs.mkdir("./uploads/", () => {});
-                            }
                             if (
                                 await this.acebase
                                     .ref("__uploads__/" + key)
@@ -491,7 +501,7 @@ export default class Serializer {
                             ) {
                                 res.json({ key, filename, url: savename });
                             }
-                            await arrbuff.write("./uploads/" + savename);
+                            await arrbuff.write(uploadPath + savename);
                             await this.acebase
                                 .ref("__uploads__/" + key)
                                 .set(props);
@@ -509,7 +519,6 @@ export default class Serializer {
                         res.sendStatus(500);
                         res.send("Error: file required");
                     }
-                    // await arrbuff.write("uploads/" + key + "." + type)
                 } catch (error) {
                     throw Error(error);
                 }
@@ -520,26 +529,131 @@ export default class Serializer {
         }
     }
 
+    protected aggregatedQuery() {
 
+    }
 
+    protected generateSearchString(data: any) {
+        if (isObject(data) && !isDate(data)) {
+            let word = "";
+            let values = Object.values(data);
+            for (const value of values) {
+                if (typeof value == "string" || typeof value == "number") {
+                    word = word + value;
+                }
+            }
+            return word;
+        } else {
+            return null;
+        }
+    }
+
+    protected async Search(ref: string, word: string): Promise<string[]> {
+        try {
+            let t = (
+                await this.acebase
+                    .query("__search_/" + ref)
+                    .filter("word", "like", "*" + word + "*")
+                    .get({ include: ["key"] })
+            ).map((s) => s.val().key);
+            return Promise.resolve(t);
+        } catch (error) {
+            return Promise.reject(error);
+        }
+    }
+
+    //implement last and first query
+    //delete where
+
+    protected async ProcessLink(ref: string, key: string, data: any) {
+        try {
+            if (!isObject(data) || isDate(data)) {
+                return Promise.resolve(null);
+            }
+
+            let wildcardRef = this.toWildCardPath(ref);
+            let fromSource = this.links.filter(
+                (link) => link.source == wildcardRef
+            );
+
+            let fromTarget = this.links.find(
+                (link) => link.target == wildcardRef
+            );
+
+            if (fromSource.length) {
+                //get the targets and set the update
+                for (const source of fromSource) {
+                    let updates: any = {};
+                    for (const field of source.fields) {
+                        const {sourceField,targetField} = field
+                        if (sourceField in data) {
+                            updates[targetField] = data[sourceField];
+                        }
+                    }
+                    const targets = await this.acebase
+                        .query(source.target)
+                        .filter(source.identity, "==", key)
+                        .find();
+                    for (const snap of targets) {
+                        await snap.update(updates);
+                    }
+                }
+            }
+
+            if (fromTarget) {
+                //get the value from source then set to target
+                let target = fromTarget;
+                const sourceKey = data[target.identity];
+                if (!sourceKey) {
+                    return Promise.reject(null);
+                }
+                let source = (
+                    await this.acebase
+                        .query(target.source)
+                        .filter("key", "==", sourceKey)
+                        .get()
+                )[0].val();
+                for (const field of target.fields) {
+                    const {sourceField,targetField} = field
+                    if (sourceField in source) {
+                        data[targetField] = source[sourceField];
+                    }
+                }
+                return Promise.resolve(data);
+            }
+        } catch (error) {
+            return Promise.reject(error);
+        }
+    }
 
     protected async autoIndex(path: string, data: any) {
         try {
-            if (isObject(data) && path.includes("/")) {
-                const dataArr = Object.entries(data);
-                for (const arr of dataArr) {
-                    const field = arr[0];
-                    const value = arr[1];
-                    path = this.toWildCardPath(path);
-                    if (isObject(value)) {
-                        await this.autoIndex(path + "/" + field, value);
-                    } else if (Array.isArray(value)) {
-                        this.acebase.indexes.create(path, field, {
-                            type: "array",
-                        });
-                    } else {
-                        this.acebase.indexes.create(path, field);
+            if (isObject(data)) {
+                if (path.includes("/")) {
+                    const dataArr = Object.entries(data);
+                    for (const arr of dataArr) {
+                        const field = arr[0];
+                        const value = arr[1];
+                        path = this.toWildCardPath(path);
+                        if (isObject(value)) {
+                            await this.autoIndex(path + "/" + field, value);
+                        } else if (Array.isArray(value)) {
+                            this.acebase.indexes.create(path, field, {
+                                type: "array",
+                            });
+                        } else if (field == SEARCH_FIELD) {
+                            this.acebase.indexes.create(path, field, {
+                                type: "fulltext",
+                            });
+                        } else {
+                            this.acebase.indexes.create(path, field);
+                        }
                     }
+                } else if (SEARCH_FIELD in data) {
+                    path = this.toWildCardPath(path);
+                    this.acebase.indexes.create(path, SEARCH_FIELD, {
+                        type: "fulltext",
+                    });
                 }
             }
             return Promise.resolve(true);
@@ -579,15 +693,30 @@ export default class Serializer {
             const executeHook =
                 hook == undefined || (typeof hook == "boolean" && hook);
             if (executeHook) {
-                this.ExecuteHook("beforeFind",  ref, {} , server?.req, server?.res);
+                this.ExecuteHook(
+                    "beforeFind",
+                    ref,
+                    {},
+                    server?.req,
+                    server?.res
+                );
             }
             let clone = cloneDeep(transaction);
             let queryRef = this.acebase.query(ref);
             queryRef = this.applyFilters(clone, queryRef);
+            if(clone["searchString"]  && typeof clone["searchString"] == "string"){
+                queryRef.filter(SEARCH_FIELD,"like", "*" +  clone["searchString"]  +"*")
+            }
             let count = await queryRef.count();
             let data = (await queryRef.get()).map((snap) => snap.val());
             if (executeHook) {
-                this.ExecuteHook("afterFind", ref, {}, server?.req, server?.res);
+                this.ExecuteHook(
+                    "afterFind",
+                    ref,
+                    {},
+                    server?.req,
+                    server?.res
+                );
             }
             return { data, count };
         } catch (error) {

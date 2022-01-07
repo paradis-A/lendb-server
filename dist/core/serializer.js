@@ -5,19 +5,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
-const graceful_fs_1 = __importDefault(require("graceful-fs"));
+const SEARCH_FIELD = "__search_field__";
 class Serializer {
     acebase;
     emitter;
     refHooks;
     authHook;
     auth;
-    constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth) {
+    links;
+    searchables;
+    constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth, link, searchables) {
         this.acebase = acebaseInstance;
         this.emitter = emitteryInstance;
         this.refHooks = refHook;
         this.authHook = authHook;
+        this.links = link;
         this.auth = auth;
+        this.searchables = searchables;
     }
     async Execute(payload, server) {
         try {
@@ -319,8 +323,8 @@ class Serializer {
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
-            const executeHook = (hook == undefined) || (typeof hook == "boolean" && hook);
-            const executeEmit = (emit == undefined) || (typeof emit == "boolean" && emit);
+            const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
+            const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             console.log("Execute hook: " + executeHook + "  emit: " + executeEmit);
             let data = this.getData(Object.assign({}, transaction));
             const hookRef = singular ? ref : this.toWildCardPath(ref);
@@ -339,11 +343,20 @@ class Serializer {
             if (executeHook) {
                 this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
             }
+            if (SEARCH_FIELD in data) {
+                delete data[SEARCH_FIELD];
+            }
+            this.ProcessLink(refference, key, data);
+            let searchField = this.generateSearchString(data);
+            if (searchField)
+                data[SEARCH_FIELD] = searchField;
+            await this.ProcessLink(ref, key, data);
             if (exists)
                 instance.update(data);
             else
                 instance.set(data);
             await this.autoIndex(hookRef, data);
+            delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
                 this.ExecuteHook(event.after, hookRef, data, server?.req, server?.res, user);
@@ -365,7 +378,7 @@ class Serializer {
             return Promise.reject(error);
         }
     }
-    async Upload(req, res) {
+    async Upload(req, res, uploadPath) {
         try {
             //@ts-ignore
             // await req.session.start();
@@ -390,16 +403,12 @@ class Serializer {
                                 filename,
                                 savename,
                             };
-                            if (!graceful_fs_1.default.existsSync("./uploads")) {
-                                //@ts-ignore
-                                graceful_fs_1.default.mkdir("./uploads/", () => { });
-                            }
                             if (await this.acebase
                                 .ref("__uploads__/" + key)
                                 .exists()) {
                                 res.json({ key, filename, url: savename });
                             }
-                            await arrbuff.write("./uploads/" + savename);
+                            await arrbuff.write(uploadPath + savename);
                             await this.acebase
                                 .ref("__uploads__/" + key)
                                 .set(props);
@@ -417,7 +426,6 @@ class Serializer {
                         res.sendStatus(500);
                         res.send("Error: file required");
                     }
-                    // await arrbuff.write("uploads/" + key + "." + type)
                 }
                 catch (error) {
                     throw Error(error);
@@ -429,25 +437,120 @@ class Serializer {
             throw error;
         }
     }
+    aggregatedQuery() {
+    }
+    generateSearchString(data) {
+        if ((0, lodash_1.isObject)(data) && !(0, lodash_1.isDate)(data)) {
+            let word = "";
+            let values = Object.values(data);
+            for (const value of values) {
+                if (typeof value == "string" || typeof value == "number") {
+                    word = word + value;
+                }
+            }
+            return word;
+        }
+        else {
+            return null;
+        }
+    }
+    async Search(ref, word) {
+        try {
+            let t = (await this.acebase
+                .query("__search_/" + ref)
+                .filter("word", "like", "*" + word + "*")
+                .get({ include: ["key"] })).map((s) => s.val().key);
+            return Promise.resolve(t);
+        }
+        catch (error) {
+            return Promise.reject(error);
+        }
+    }
+    //implement last and first query
+    //delete where
+    async ProcessLink(ref, key, data) {
+        try {
+            if (!(0, lodash_1.isObject)(data) || (0, lodash_1.isDate)(data)) {
+                return Promise.resolve(null);
+            }
+            let wildcardRef = this.toWildCardPath(ref);
+            let fromSource = this.links.filter((link) => link.source == wildcardRef);
+            let fromTarget = this.links.find((link) => link.target == wildcardRef);
+            if (fromSource.length) {
+                //get the targets and set the update
+                for (const source of fromSource) {
+                    let updates = {};
+                    for (const field of source.fields) {
+                        const { sourceField, targetField } = field;
+                        if (sourceField in data) {
+                            updates[targetField] = data[sourceField];
+                        }
+                    }
+                    const targets = await this.acebase
+                        .query(source.target)
+                        .filter(source.identity, "==", key)
+                        .find();
+                    for (const snap of targets) {
+                        await snap.update(updates);
+                    }
+                }
+            }
+            if (fromTarget) {
+                //get the value from source then set to target
+                let target = fromTarget;
+                const sourceKey = data[target.identity];
+                if (!sourceKey) {
+                    return Promise.reject(null);
+                }
+                let source = (await this.acebase
+                    .query(target.source)
+                    .filter("key", "==", sourceKey)
+                    .get())[0].val();
+                for (const field of target.fields) {
+                    const { sourceField, targetField } = field;
+                    if (sourceField in source) {
+                        data[targetField] = source[sourceField];
+                    }
+                }
+                return Promise.resolve(data);
+            }
+        }
+        catch (error) {
+            return Promise.reject(error);
+        }
+    }
     async autoIndex(path, data) {
         try {
-            if ((0, lodash_1.isObject)(data) && path.includes("/")) {
-                const dataArr = Object.entries(data);
-                for (const arr of dataArr) {
-                    const field = arr[0];
-                    const value = arr[1];
+            if ((0, lodash_1.isObject)(data)) {
+                if (path.includes("/")) {
+                    const dataArr = Object.entries(data);
+                    for (const arr of dataArr) {
+                        const field = arr[0];
+                        const value = arr[1];
+                        path = this.toWildCardPath(path);
+                        if ((0, lodash_1.isObject)(value)) {
+                            await this.autoIndex(path + "/" + field, value);
+                        }
+                        else if (Array.isArray(value)) {
+                            this.acebase.indexes.create(path, field, {
+                                type: "array",
+                            });
+                        }
+                        else if (field == SEARCH_FIELD) {
+                            this.acebase.indexes.create(path, field, {
+                                type: "fulltext",
+                            });
+                        }
+                        else {
+                            this.acebase.indexes.create(path, field);
+                        }
+                    }
+                }
+                else if (SEARCH_FIELD in data) {
                     path = this.toWildCardPath(path);
-                    if ((0, lodash_1.isObject)(value)) {
-                        await this.autoIndex(path + "/" + field, value);
-                    }
-                    else if (Array.isArray(value)) {
-                        this.acebase.indexes.create(path, field, {
-                            type: "array",
-                        });
-                    }
-                    else {
-                        this.acebase.indexes.create(path, field);
-                    }
+                    this.acebase.indexes.create(path, SEARCH_FIELD, {
+                        type: "fulltext",
+                    });
                 }
             }
             return Promise.resolve(true);
@@ -485,6 +588,9 @@ class Serializer {
             let clone = (0, lodash_1.cloneDeep)(transaction);
             let queryRef = this.acebase.query(ref);
             queryRef = this.applyFilters(clone, queryRef);
+            if (clone["searchString"] && typeof clone["searchString"] == "string") {
+                queryRef.filter(SEARCH_FIELD, "like", "*" + clone["searchString"] + "*");
+            }
             let count = await queryRef.count();
             let data = (await queryRef.get()).map((snap) => snap.val());
             if (executeHook) {
@@ -532,3 +638,4 @@ class Serializer {
     }
 }
 exports.default = Serializer;
+//# sourceMappingURL=serializer.js.map

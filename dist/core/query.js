@@ -15,6 +15,7 @@ class LenQuery {
     operation;
     exclusion = [];
     inclusion = [];
+    searchString;
     sorts = [];
     serializer;
     emitter;
@@ -110,6 +111,10 @@ class LenQuery {
     include(fields) {
         this.inclusion = fields;
     }
+    search(word) {
+        this.searchString = word;
+        return this;
+    }
     stripNonQuery(clone) {
         delete clone.serializer;
         delete clone.emitter;
@@ -203,3 +208,4 @@ class iLiveQuery {
             return this.update;
     }
 }
+//# sourceMappingURL=query.js.map

@@ -78,3 +78,9 @@ typings/
 node_modules
 
 tests/
+
+test/**.acebase
+
+test/uploads
+
+test.bat
