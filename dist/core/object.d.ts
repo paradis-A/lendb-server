@@ -18,6 +18,7 @@ export default class LenObject {
         emit: boolean;
         hook: boolean;
     }): Promise<any>;
+    exists(): Promise<boolean>;
     commit(serverOpts?: {
         emit: boolean;
         hook: boolean;

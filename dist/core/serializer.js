@@ -63,6 +63,10 @@ class Serializer {
                         result = await this.Load(transaction, server);
                         break;
                     }
+                    case "exists": {
+                        result = await this.Exists(transaction);
+                        break;
+                    }
                     case "destroy": {
                         result = await this.Destroy(transaction, server);
                         break;
@@ -221,18 +225,19 @@ class Serializer {
             }
             else {
                 let splitted = ref.split("/");
-                const last = splitted[splitted.length - 1];
-                if (cuid_1.default.isCuid(last)) {
-                    splitted[splitted.length - 1] = key;
+                if (splitted.some(s => s.includes("*"))) {
+                    return Promise.reject("Wildcards not supported on checking if refference exists");
                 }
-                else {
-                    splitted.push(key);
-                }
+                // if(cuid.isCuid(splitted[splitted.length - 1])) return Promise.reject("")
+                splitted.push(key);
                 const joined = splitted.join("/");
                 result = await this.acebase.ref(joined).exists();
             }
+            return Promise.resolve(result);
         }
-        catch (error) { }
+        catch (error) {
+            return Promise.reject(error);
+        }
     }
     async Load(transaction, server) {
         try {

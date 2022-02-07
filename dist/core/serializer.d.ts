@@ -31,7 +31,7 @@ export default class Serializer {
         req?: Request;
         res?: Response;
     }): Promise<any>;
-    protected Exists(transaction: any): Promise<void>;
+    protected Exists(transaction: any): Promise<boolean>;
     protected Load(transaction: any, server: {
         req?: Request;
         res?: Response;

@@ -91,6 +91,10 @@ export default class Serializer {
                         result = await this.Load(transaction, server);
                         break;
                     }
+                    case "exists": {
+                        result = await this.Exists(transaction)
+                        break
+                    }
                     case "destroy": {
                         result = await this.Destroy(transaction, server);
                         break;
@@ -121,7 +125,7 @@ export default class Serializer {
             this.authHook.find((a) => a.event == event)?.callback(data);
         }
     }
-
+    
     protected getData(transaction: any) {
         let temp = transaction;
         delete temp.operation;
@@ -269,26 +273,26 @@ export default class Serializer {
             return Promise.reject(error);
         }
     }
-
     protected async Exists(transaction: any) {
         try {
             const { key, ref, singular } = transaction;
             let result = false;
-
             if (singular) {
                 result = await this.acebase.ref(ref).exists();
             } else {
-                let splitted = ref.split("/");
-                const last = splitted[splitted.length - 1];
-                if (cuid.isCuid(last)) {
-                    splitted[splitted.length - 1] = key;
-                } else {
-                    splitted.push(key);
+                let splitted: string[] = ref.split("/");
+                if(splitted.some(s=>s.includes("*"))){
+                    return Promise.reject("Wildcards not supported on checking if refference exists")
                 }
+                // if(cuid.isCuid(splitted[splitted.length - 1])) return Promise.reject("")
+                splitted.push(key);
                 const joined = splitted.join("/");
                 result = await this.acebase.ref(joined).exists();
             }
-        } catch (error) {}
+            return Promise.resolve(result)
+        } catch (error) {
+            return Promise.reject(error)
+        }
     }
 
     protected async Load(

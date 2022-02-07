@@ -44,6 +44,21 @@ class LenObject {
             return Promise.reject(error);
         }
     }
+    async exists() {
+        try {
+            let payload = {
+                singular: this.singular,
+                key: this.key,
+                ref: this.ref,
+                operation: "exists"
+            };
+            let res = await this.serializer.Execute(payload);
+            return Promise.resolve(res);
+        }
+        catch (error) {
+            Promise.reject(error);
+        }
+    }
     async commit(serverOpts = { emit: false, hook: false }) {
         try {
             if (this.ref.includes("*")) {

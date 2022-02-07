@@ -15,7 +15,7 @@ export default class LenObject {
         hook: true,
         emit: true,
     };
-    
+
     protected serializer: Serializer;
     constructor(
         ref: string,
@@ -50,6 +50,21 @@ export default class LenObject {
             return Promise.resolve(res);
         } catch (error) {
             return Promise.reject(error);
+        }
+    }
+    
+    async exists(): Promise<boolean> {
+        try {
+            let payload = {
+                singular: this.singular,
+                key: this.key,
+                ref: this.ref,
+                operation: "exists"
+            };
+            let res = await this.serializer.Execute(payload);
+            return Promise.resolve(res);
+        } catch (error) {
+            Promise.reject(error);
         }
     }
 
@@ -94,7 +109,6 @@ export default class LenObject {
         delete clone.loadedRawData;
         return clone;
     }
-
 
     /**
      * Loads the data from the database with key provided
