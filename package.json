@@ -9,8 +9,8 @@
     "dev": "tsc -w"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Clarence Duquez Eda (paradis-A)",
+  "license": "MIT",
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^13.1.2",
     "@types/figlet": "^1.5.4",
