@@ -8,7 +8,15 @@
     "build": "tsc",
     "dev": "tsc -w"
   },
-  "keywords": ["acebase-wrapper","acebase-server","acebase","object","object database", "acebase wrapper", "object-db"],
+  "keywords": [
+    "acebase-wrapper",
+    "acebase-server",
+    "acebase",
+    "object",
+    "object database",
+    "acebase wrapper",
+    "object-db"
+  ],
   "author": "Clarence Duquez Eda (paradis-A)",
   "license": "MIT",
   "repository": "https://github.com/paradis-A/lendb-server",

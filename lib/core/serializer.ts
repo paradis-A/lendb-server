@@ -425,7 +425,7 @@ export default class Serializer {
             };
 
             if (executeHook) {
-                const hookData = this.ExecuteHook(
+                const hookData = await this.ExecuteHook(
                     event.before,
                     hookRef,
                     data,
@@ -434,6 +434,7 @@ export default class Serializer {
                     user
                 );
                 if (hookData && isObject(hookData) && !isDate(hookData)) {
+                    console.log(hookData)
                     Object.assign(data, hookData);
                 }
             }
@@ -461,9 +462,8 @@ export default class Serializer {
             delete data[searchField];
             let returnData = (await instance.get()).val();
             instance.off();
-
             if (executeHook) {
-                this.ExecuteHook(
+                await this.ExecuteHook(
                     event.after,
                     hookRef,
                     returnData,
@@ -831,9 +831,9 @@ export default class Serializer {
                 queryRef.filter(f[0], f[1], f[2]);
             });
         }
-        // else {
-        //     queryRef.filter("key", "!=", null);
-        // }
+        else {
+            queryRef.filter("key", "!=", null);
+        }
         if (Array.isArray(payload?.sorts)) {
             payload.sorts.forEach((s) => {
                 if (s.length > 1) queryRef.sort(s[0], s[1]);

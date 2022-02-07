@@ -59,7 +59,7 @@ class LenObject {
             Promise.reject(error);
         }
     }
-    async commit(serverOpts = { emit: false, hook: false }) {
+    async commit(serverOpts = { emit: true, hook: false }) {
         try {
             if (this.ref.includes("*")) {
                 return Promise.reject("Error: Adding or Updating must not contain wildcard path.");

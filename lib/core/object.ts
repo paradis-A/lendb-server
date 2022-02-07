@@ -15,7 +15,7 @@ export default class LenObject {
         hook: true,
         emit: true,
     };
-    
+
     protected serializer: Serializer;
     constructor(
         ref: string,
@@ -68,7 +68,7 @@ export default class LenObject {
         }
     }
 
-    async commit(serverOpts = { emit: false, hook: false }): Promise<any> {
+    async commit(serverOpts = { emit: true, hook: false }): Promise<any> {
         try {
             if (this.ref.includes("*")) {
                 return Promise.reject(

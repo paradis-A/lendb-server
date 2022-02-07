@@ -344,8 +344,9 @@ class Serializer {
                 after: exists ? "afterUpdate" : "afterAdd",
             };
             if (executeHook) {
-                const hookData = this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
+                const hookData = await this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
                 if (hookData && (0, lodash_1.isObject)(hookData) && !(0, lodash_1.isDate)(hookData)) {
+                    console.log(hookData);
                     Object.assign(data, hookData);
                 }
             }
@@ -377,7 +378,7 @@ class Serializer {
             let returnData = (await instance.get()).val();
             instance.off();
             if (executeHook) {
-                this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
+                await this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
             }
             //! access level permission when emitting for client side
             if (executeEmit) {
@@ -685,9 +686,9 @@ class Serializer {
                 queryRef.filter(f[0], f[1], f[2]);
             });
         }
-        // else {
-        //     queryRef.filter("key", "!=", null);
-        // }
+        else {
+            queryRef.filter("key", "!=", null);
+        }
         if (Array.isArray(payload?.sorts)) {
             payload.sorts.forEach((s) => {
                 if (s.length > 1)
