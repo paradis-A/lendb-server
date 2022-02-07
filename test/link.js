@@ -3,7 +3,7 @@ const { LenDB } = require("../dist");
 const db = new LenDB("linktest", { logLevel: "error" });
 describe("link", async function () {
     describe(`Join the fields by using ObjectLink`, function () {
-        it("Should much source field value of target", async () => {
+        it("Should match source field value of target", async () => {
             db.ObjectLink({
                 target: "persons",
                 source: "pets",
@@ -20,7 +20,6 @@ describe("link", async function () {
             let person = db.Object("persons").assign({name: "Clarence",pet_id: pet.key})
             await person.commit()
             let result = await db.Object("persons", person.key).load()
-            console.log(result)
             assert.equal(result.pet_name, "jojo");
         });
     });
