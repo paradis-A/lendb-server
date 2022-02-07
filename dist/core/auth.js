@@ -5,16 +5,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const jwt_simple_1 = __importDefault(require("jwt-simple"));
 const cuid_1 = __importDefault(require("cuid"));
-const lodash_1 = require("lodash");
+const dayjs_1 = __importDefault(require("dayjs"));
 class Auth {
-    acebase;
-    enabled = false;
-    tokenExpiration = 100000; //100000 hours
-    updateTokenMinutes = 1440; //60 mins X 24 hours = 1 day
-    defaultRole = "user";
     // protected req: Request
     // protected res: Response
     constructor(acebase) {
+        this.enabled = false;
+        this.tokenExpiration = 48;
+        this.defaultRole = "user";
         this.acebase = acebase;
     }
     SetDefaultRole(role) {
@@ -25,46 +23,40 @@ class Auth {
     }
     async Login(usernameOrEmail, password) {
         try {
-            let isEmail = await this.acebase
-                .query("__users__")
-                .filter("email", "==", usernameOrEmail)
-                .exists();
-            let isUsername = await this.acebase
-                .query("__users__")
-                .filter("username", "==", usernameOrEmail)
-                .exists();
-            if (isEmail || isUsername) {
-                let userinfo;
-                if (isEmail)
-                    userinfo = (await this.acebase
-                        .query("__users__")
-                        .filter("email", "==", usernameOrEmail)
-                        .get()).map((v) => v)[0];
-                if (isUsername)
-                    userinfo = (await this.acebase
-                        .query("__users__")
-                        .filter("username", "==", usernameOrEmail)
-                        .get()).map((v) => v.val())[0];
-                let decodedPass = jwt_simple_1.default.decode(userinfo.password, userinfo.jwtKey);
-                if (decodedPass == password) {
-                    const token = jwt_simple_1.default.encode(password, (0, cuid_1.default)());
-                    const tokenKey = (0, cuid_1.default)();
-                    await this.acebase.ref("__tokens__/" + tokenKey).set({
-                        key: tokenKey,
-                        userID: userinfo.id,
-                        token,
-                        expiration: Date.now() * this.tokenExpiration,
-                    });
-                    delete userinfo.password;
-                    delete userinfo.jwtKey;
-                    return Promise.resolve({
-                        token,
-                        ...userinfo,
-                    });
-                }
-                else {
-                    return Promise.reject("Error: username/email and password does not match.");
-                }
+            let userinfo;
+            if (this.isValidEmail(usernameOrEmail)) {
+                userinfo = (await this.acebase
+                    .query("__users__")
+                    .filter("email", "==", usernameOrEmail)
+                    .get()).map((v) => v)[0];
+            }
+            else {
+                userinfo = (await this.acebase
+                    .query("__users__")
+                    .filter("username", "==", usernameOrEmail)
+                    .get()).map((v) => v.val())[0];
+            }
+            if (!userinfo?.username) {
+                return Promise.reject("Error: username/email and password does not match.");
+            }
+            let decodedPass = jwt_simple_1.default.decode(userinfo.password, userinfo.jwtKey);
+            if (decodedPass == password) {
+                const client_key = (0, cuid_1.default)();
+                const token = jwt_simple_1.default.encode(userinfo.key, (0, cuid_1.default)()) + "." + client_key;
+                const expiration = (0, dayjs_1.default)(Date.now()).add(this.tokenExpiration / 24, "day");
+                await this.acebase.ref("__tokens__/" + token).set({
+                    userKey: userinfo.key,
+                    expiration: new Date(expiration.toISOString()),
+                });
+                delete userinfo.password;
+                delete userinfo.jwtKey;
+                //set token with client key
+                return Promise.resolve({
+                    client_key,
+                    token,
+                    data: userinfo,
+                    expiration: expiration.get("milliseconds"),
+                });
             }
             else {
                 return Promise.reject("Error: username/email and password does not match.");
@@ -74,42 +66,46 @@ class Auth {
             return Promise.reject(error);
         }
     }
-    async LoginWithToken(token) {
+    async AuthenticateWS() { }
+    async Authenticate(token) {
         try {
-            const res = (await this.acebase
-                .query("__token__")
-                .filter("token", "==", token)
-                .get()).map((v) => v.val())[0];
-            if (res) {
-                if (res?.expiration <= Date.now()) {
-                    return Promise.reject("Error: Access token expired");
-                }
-                else {
-                    let userID = res?.userID;
-                    const tokenKey = (0, cuid_1.default)();
-                    let userinfo = (await this.acebase.ref("__users__/" + userID).get()).val();
-                    const newToken = jwt_simple_1.default.encode(userinfo.password, (0, cuid_1.default)());
-                    delete userinfo.password;
-                    delete userinfo.jwtKey;
-                    await this.acebase.ref("__tokens__/" + tokenKey).set({
-                        token: newToken,
-                        key: tokenKey,
-                        userID: userinfo?.id
-                    });
-                    return Promise.resolve({
-                        token: newToken,
-                        ...userinfo
-                    });
-                }
+            let ref = this.acebase.ref("__tokens__/" + token);
+            console.log("ref exists: ", await ref.exists());
+            if (!await ref.exists()) {
+                return Promise.reject("Invalid Token");
             }
             else {
-                return Promise.reject("Error: Access token invalid.");
+                let verifiedToken = (await ref.get()).val();
+                console.log((0, dayjs_1.default)(verifiedToken?.expiration).diff() <= 0);
+                if ((0, dayjs_1.default)(verifiedToken?.expiration).diff() <= 0) {
+                    return Promise.reject("Token Expiredasdsds");
+                }
+                else {
+                    let userDetails = (await this.acebase
+                        .ref("__users__/" + verifiedToken?.userKey)
+                        .get()).val();
+                    console.log(verifiedToken);
+                    const userKey = userDetails.key;
+                    await ref.remove();
+                    const expiration = (0, dayjs_1.default)(Date.now()).add(this.tokenExpiration / 24, "day");
+                    let client_key = token.substring(token.length - 25);
+                    let newToken = jwt_simple_1.default.encode((0, cuid_1.default)(), (0, cuid_1.default)()) + "." + client_key; //the secret without meaning
+                    //! set client key on token
+                    await this.acebase.ref("__tokens__/" + newToken).set({
+                        userKey,
+                        expiration: new Date(expiration.toISOString()),
+                    });
+                    delete userDetails.password;
+                    delete userDetails.jwtKey;
+                    return Promise.resolve({ data: userDetails, client_key, token: newToken, expiration: expiration.get("milliseconds") });
+                }
             }
         }
-        catch (error) { }
+        catch (error) {
+            return Promise.reject("Token Expired");
+        }
     }
-    static UserList() {
-    }
+    static UserList() { }
     async GetUser(token) {
         let res = (await this.acebase
             .query("__tokens__")
@@ -119,9 +115,9 @@ class Auth {
         });
         if (res.length) {
             let userToken = res[0];
-            if (userToken?.userID) {
+            if (userToken?.userKey) {
                 let userDetails = (await this.acebase
-                    .ref("__users__/" + userToken.userID)
+                    .ref("__users__/" + userToken.userKey)
                     .get()).val();
                 delete userDetails.password;
                 delete userDetails.jwtKey;
@@ -132,7 +128,10 @@ class Auth {
     }
     async Logout(token) {
         try {
-            let key = (await this.acebase.query("__tokens__").filter("token", "==", token).get())[0]?.key;
+            let key = (await this.acebase
+                .query("__tokens__")
+                .filter("token", "==", token)
+                .get()).map((v) => v.val())[0]?.key;
             if (key) {
                 await this.acebase.ref("__tokens__/" + key).remove();
             }
@@ -142,35 +141,76 @@ class Auth {
             throw new Error(error);
         }
     }
-    async Register(username, password, email, details) {
-        this.acebase = global.database;
-        let jwtKey = (0, cuid_1.default)();
-        let tokenizedPassword = jwt_simple_1.default.encode(password, jwtKey);
-        let obj = {
-            email,
-            username,
-            password: tokenizedPassword,
-            role: this.defaultRole,
-            jwtKey,
-        };
-        const userID = (0, cuid_1.default)();
-        if ((0, lodash_1.isObject)(details))
-            obj = {
-                key: userID,
-                email,
-                username,
+    isValidEmail(email) {
+        return String(email)
+            .toLowerCase()
+            .match(/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/);
+    }
+    async Register(credentials) {
+        try {
+            if (typeof credentials.username != "string") {
+                return Promise.reject("argument username expected to be string");
+            }
+            if (typeof credentials.password != "string") {
+                return Promise.reject("argument password expected to be string");
+            }
+            if (typeof credentials.email != "string" ||
+                !this.isValidEmail(credentials.email)) {
+                return Promise.reject("invalid email");
+            }
+            let jwtKey = (0, cuid_1.default)();
+            const userKey = (0, cuid_1.default)();
+            let tokenizedPassword = jwt_simple_1.default.encode(credentials.password, jwtKey);
+            let obj = {
+                email: credentials.email,
+                username: credentials.username,
                 password: tokenizedPassword,
+                role: this.defaultRole,
                 jwtKey,
-                ...details,
-                created_at: Date.now(),
+                key: userKey,
+                created_at: new Date(Date.now()),
             };
-        await this.acebase.ref("__users__/" + userID).set(obj);
-        const expiration = Date.now() * this.tokenExpiration;
-        const token = jwt_simple_1.default.encode(password, (0, cuid_1.default)());
-        const tokenKey = (0, cuid_1.default)();
-        await this.acebase
-            .ref("__tokens__/" + tokenKey)
-            .set({ key: tokenKey, userID, token, expiration });
+            //check if email exists
+            if (await this.acebase
+                .query("__users__")
+                .filter("username", "==", obj.username)
+                .exists()) {
+                return Promise.reject("Username already exists");
+            }
+            //check if username exists
+            if (await this.acebase
+                .query("__users__")
+                .filter("email", "==", obj.password)
+                .exists()) {
+                return Promise.reject("Email already exists");
+            }
+            await this.acebase.ref("__users__/" + userKey).set(obj);
+            const expiration = (0, dayjs_1.default)(Date.now()).add(this.tokenExpiration / 24, "day");
+            const client_key = (0, cuid_1.default)();
+            const token = jwt_simple_1.default.encode((0, cuid_1.default)(), (0, cuid_1.default)()) + "." + client_key;
+            await this.acebase
+                .ref("__tokens__/" + token)
+                .set({
+                userKey: userKey,
+                expiration: new Date(expiration.toISOString()),
+            });
+            delete credentials.password;
+            let data = {
+                ...credentials,
+                key: userKey,
+                role: obj.role,
+                created_at: obj.created_at,
+            };
+            return Promise.resolve({
+                data,
+                expiration: expiration.get("milliseconds"),
+                token,
+                client_key,
+            });
+        }
+        catch (error) {
+            return Promise.reject(error);
+        }
     }
 }
 exports.default = Auth;

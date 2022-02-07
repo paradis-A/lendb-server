@@ -7,21 +7,15 @@ const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
 const normalize_1 = __importDefault(require("./normalize"));
 class LenQuery {
-    filters = [];
-    ref;
-    skip = 0;
-    limit = 100;
-    page = 0;
-    operation;
-    exclusion = [];
-    inclusion = [];
-    searchString;
-    sorts = [];
-    serializer;
-    emitter;
-    unsubscribePrevious = null;
-    hook;
-    constructor(ref, emitter, serializer) {
+    constructor(ref, emitter, serializer, acebase) {
+        this.filters = {};
+        this.sorts = {};
+        this.skip = 0;
+        this.limit = 100;
+        this.page = 0;
+        this.exclusion = [];
+        this.inclusion = [];
+        this.unsubscribePrevious = null;
         this.serializer = serializer;
         this.emitter = emitter;
         this.ref = ref;
@@ -34,7 +28,7 @@ class LenQuery {
             val = "*" + value;
         if (pattern == "right")
             val = value + "*";
-        this.filters.push([field, "like", val]);
+        this.filters[field + "[like]"] = val;
         return this;
     }
     notLike(field, value, pattern) {
@@ -43,67 +37,76 @@ class LenQuery {
             val = "*" + value;
         if (pattern == "right")
             val = value + "*";
-        this.filters.push([field, "!like", val]);
+        this.filters[field + "[!like]"] = val;
         return this;
     }
     gt(field, value) {
-        this.filters.push([field, ">", value]);
+        this.filters[field + "[>]"] = value;
         return this;
     }
     gte(field, value) {
-        this.filters.push([field, ">=", value]);
+        this.filters[field + "[>=]"] = value;
+        return this;
+    }
+    between(field, value) {
+        this.filters[field + "[between]"] = value;
+        return this;
+    }
+    notBetween(field, value) {
+        this.filters[field + "[!between]"] = value;
         return this;
     }
     lt(field, value) {
-        this.filters.push([field, "<", value]);
+        this.filters[field + "[<]"] = value;
         return this;
     }
     lte(field, value) {
-        this.filters.push([field, "<=", value]);
+        this.filters[field + "[<=]"] = value;
         return this;
     }
     eq(field, value) {
-        this.filters.push([field, "==", value]);
+        this.filters[field + "[eq]"] = value;
         return this;
     }
     notEq(field, value) {
-        this.filters.push([field, "!=", value]);
+        this.filters[field + "[!=]"] = value;
         return this;
     }
     in(field, value) {
-        this.filters.push([field, "in", value]);
+        this.filters[field + "[in]"] = value;
         return this;
     }
     notIn(field, value) {
-        this.filters.push([field, "!in", value]);
+        this.filters[field + "[!in]"] = value;
         return this;
     }
     matches(field, value) {
-        this.filters.push([field, "matches", value]);
+        this.filters[field + "[matches]"] = value;
         return this;
     }
     notMatches(field, value) {
-        this.filters.push([field, "!matches", value]);
+        this.filters[field + "[!matches]"] = value;
         return this;
     }
     has(field, value) {
-        this.filters.push([field, "has", value]);
+        this.filters[field + "[has]"] = value;
         return this;
     }
     notHas(field, value) {
-        this.filters.push([field, "!has", value]);
+        this.filters[field]["!has"] = value;
         return this;
     }
     contains(field, value) {
-        this.filters.push([field, "contains", value]);
+        this.filters[field]["contains"] = value;
         return this;
     }
     notContains(field, value) {
-        this.filters.push([field, "!contains", value]);
+        this.filters[field]["!contains"] = value;
         return this;
     }
     sort(field, asc = false) {
-        this.sorts.push([field, asc]);
+        this.sorts[field] = asc ? "ASC" : "DESC";
+        return this;
     }
     exclude(fields) {
         this.exclusion = fields;
@@ -120,29 +123,6 @@ class LenQuery {
         delete clone.emitter;
         delete clone.unsubscribePrevious;
         return clone;
-    }
-    async watch(cb, fetchOptions = {
-        hook: false,
-    }) {
-        let events = new iLiveQuery();
-        console.log("Emit ref from client is: " + "add:" + this.toWildCardPath(this.ref));
-        cb(events);
-        if (events.getEvent("add")) {
-            this.emitter.on("add:" + this.toWildCardPath(this.ref), data => {
-                events.getEvent("add")(data);
-            });
-        }
-        if (events.getEvent("update")) {
-            this.emitter.on("update:" + this.toWildCardPath(this.ref), data => {
-                events.getEvent("update")(data);
-            });
-        }
-        if (events.getEvent("destroy")) {
-            this.emitter.on("destroy:" + this.toWildCardPath(this.ref), data => {
-                events.getEvent("destroy")(data);
-            });
-        }
-        return await this.fetch(fetchOptions);
     }
     toWildCardPath(ref) {
         return ref
@@ -186,10 +166,12 @@ class LenQuery {
 }
 exports.default = LenQuery;
 class iLiveQuery {
-    callbacks = [];
-    add = null;
-    update = null;
-    destroy = null;
+    constructor() {
+        this.callbacks = [];
+        this.add = null;
+        this.update = null;
+        this.destroy = null;
+    }
     onAdd(cb) {
         this.add = cb;
     }

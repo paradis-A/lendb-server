@@ -1,14 +1,18 @@
 // import Save from "./save"
 import type Request from "hyper-express/types/components/http/Request";
 import type Response from "hyper-express/types/components/http/Response";
+import type { TemplatedApp } from "../extras/uws";
 import cuid from "cuid";
 import { AceBase } from "acebase";
 import { iRefHook, iAuthHook, iAuthEvent, iRefEvent } from "./hook";
 import type Emittery from "emittery";
 import { DataReferenceQuery } from "acebase-core";
-import { cloneDeep, isDate, isObject } from "lodash";
+import { cloneDeep, isDate, isNumber, isObject, values } from "lodash";
 import Auth, { Account } from "./auth";
 import type { ObjectLink } from "./";
+import { RealtimeQueryEvent } from "acebase-core/types/data-reference";
+import wait from "wait";
+import dayjs from "dayjs";
 const SEARCH_FIELD = "__search_field__";
 export default class Serializer {
     protected acebase: AceBase;
@@ -17,6 +21,7 @@ export default class Serializer {
     protected authHook: iAuthHook[];
     protected auth: Auth;
     protected links: ObjectLink[];
+    protected publisher: TemplatedApp;
     protected searchables: { ref: string; fields: string }[];
     constructor(
         acebaseInstance: AceBase,
@@ -25,7 +30,7 @@ export default class Serializer {
         authHook: iAuthHook[],
         auth?: Auth,
         link?: ObjectLink[],
-        searchables?: { ref: string; fields: string }[]
+        publisher?: TemplatedApp
     ) {
         this.acebase = acebaseInstance;
         this.emitter = emitteryInstance;
@@ -33,7 +38,8 @@ export default class Serializer {
         this.authHook = authHook;
         this.links = link;
         this.auth = auth;
-        this.searchables = searchables;
+        this.publisher = publisher;
+        // this.searchables = searchables;
     }
 
     async Execute(
@@ -42,7 +48,21 @@ export default class Serializer {
     ): Promise<any> {
         try {
             let result = {};
+            let resultArray = []
             if (Array.isArray(payload)) {
+                //run acl and schema validation here
+                //cache the old value and rollback when error occurs
+                for (const transaction of payload) {
+                    if(!["save","destroy"].includes(transaction?.operation)){
+                        throw new Error("Error: Invalid operation")
+                    }
+                    if(transaction?.operation == "save"){
+                        resultArray.push(await this.Save(transaction,server))
+                    }else if(transaction?.operation == "destroy"){
+                        resultArray.push(await this.Destroy(transaction,server))
+                    }
+                }
+                return resultArray
             } else {
                 const operations = [
                     "save",
@@ -85,14 +105,6 @@ export default class Serializer {
         }
     }
 
-    protected GetHook(event: iAuthEvent | iRefEvent, ref?: string) {
-        if (ref && typeof ref == "string" && event) {
-            return this.refHooks.find((h) => h.ref == ref && h.event == event);
-        } else if (event && !ref) {
-            return this.authHook.find((a) => a.event == event);
-        }
-    }
-
     protected ExecuteHook(
         event: iAuthEvent | iRefEvent,
         ref: string,
@@ -102,7 +114,7 @@ export default class Serializer {
         user?: Account
     ) {
         if (ref && typeof ref == "string" && event) {
-            this.refHooks
+            return this.refHooks
                 .find((h) => h.ref == ref && h.event == event)
                 ?.callback(data, req, res, user);
         } else if (event && !ref) {
@@ -394,17 +406,12 @@ export default class Serializer {
                 hook == undefined || (typeof hook == "boolean" && hook);
             const executeEmit =
                 emit == undefined || (typeof emit == "boolean" && emit);
-            console.log(
-                "Execute hook: " + executeHook + "  emit: " + executeEmit
-            );
-            let data = this.getData(Object.assign({}, transaction));
+            let data: any = this.getData(Object.assign({}, transaction));
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
             !singular || delete data.key;
             let instance = this.acebase.ref(refference);
             const exists = await instance.exists();
-            if (exists) data.updated_at = new Date(Date.now());
-            else data.created_at = new Date(Date.now());
             const event: {
                 before: iAuthEvent | iRefEvent;
                 after: iAuthEvent | iRefEvent;
@@ -412,8 +419,9 @@ export default class Serializer {
                 before: exists ? "beforeUpdate" : "beforeAdd",
                 after: exists ? "afterUpdate" : "afterAdd",
             };
+
             if (executeHook) {
-                this.ExecuteHook(
+                const hookData = this.ExecuteHook(
                     event.before,
                     hookRef,
                     data,
@@ -421,24 +429,40 @@ export default class Serializer {
                     server?.res,
                     user
                 );
+                if (hookData && isObject(hookData) && !isDate(hookData)) {
+                    Object.assign(data, hookData);
+                }
             }
+
+            if (exists) data.updated_at = new Date(Date.now());
+            else data.created_at = new Date(Date.now());
             if (SEARCH_FIELD in data) {
                 delete data[SEARCH_FIELD];
+            }
+            for (const entry of Object.entries(data)) {
+                //@ts-ignore
+                if(isDate(entry[0])){
+                     //@ts-ignore
+                    data[entry[0]] = new Date(entry[1])
+                }
             }
             this.ProcessLink(refference, key, data);
             let searchField = this.generateSearchString(data);
             if (searchField) data[SEARCH_FIELD] = searchField;
-            await this.ProcessLink(ref,key,data)
+            await this.ProcessLink(ref, key, data);
+
             if (exists) instance.update(data);
             else instance.set(data);
             await this.autoIndex(hookRef, data);
             delete data[searchField];
             let returnData = (await instance.get()).val();
+            instance.off();
+
             if (executeHook) {
                 this.ExecuteHook(
                     event.after,
                     hookRef,
-                    data,
+                    returnData,
                     server?.req,
                     server?.res,
                     user
@@ -447,17 +471,9 @@ export default class Serializer {
             //! access level permission when emitting for client side
             if (executeEmit) {
                 if (exists) {
-                    console.log(
-                        "Emit ref from server is: " + "update:" + hookRef,
-                        data
-                    );
-                    this.emitter.emit("update:" + hookRef, data);
+                    this.emitter.emit("update:" + hookRef, returnData);
                 } else {
-                    console.log(
-                        "Emit ref from server is: " + "add:" + hookRef,
-                        data
-                    );
-                    this.emitter.emit("add:" + hookRef, data);
+                    this.emitter.emit("add:" + hookRef, returnData);
                 }
             }
             return Promise.resolve(returnData);
@@ -529,9 +545,7 @@ export default class Serializer {
         }
     }
 
-    protected aggregatedQuery() {
-
-    }
+    // protected aggregatedQuery() {}
 
     protected generateSearchString(data: any) {
         if (isObject(data) && !isDate(data)) {
@@ -585,7 +599,7 @@ export default class Serializer {
                 for (const source of fromSource) {
                     let updates: any = {};
                     for (const field of source.fields) {
-                        const {sourceField,targetField} = field
+                        const { sourceField, targetField } = field;
                         if (sourceField in data) {
                             updates[targetField] = data[sourceField];
                         }
@@ -614,7 +628,7 @@ export default class Serializer {
                         .get()
                 )[0].val();
                 for (const field of target.fields) {
-                    const {sourceField,targetField} = field
+                    const { sourceField, targetField } = field;
                     if (sourceField in source) {
                         data[targetField] = source[sourceField];
                     }
@@ -684,39 +698,78 @@ export default class Serializer {
         server: { req?: Request; res?: Response }
     ): Promise<{ data: any[]; count: number }> {
         try {
-            const { ref, hook } = transaction;
+            const { ref, hook, live, subscriptionKey } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
                 return Promise.reject(
                     "Error: cannot access secured refferences use  instance.User() instead."
                 );
             }
+            let clone = cloneDeep(transaction);
+            let queryRef = this.acebase.query(ref);
             const executeHook =
                 hook == undefined || (typeof hook == "boolean" && hook);
             if (executeHook) {
-                this.ExecuteHook(
+                const hookedQuery = this.ExecuteHook(
                     "beforeFind",
                     ref,
-                    {},
+                    clone,
                     server?.req,
                     server?.res
                 );
+                if (hookedQuery) {
+                    clone = hookedQuery;
+                }
             }
-            let clone = cloneDeep(transaction);
-            let queryRef = this.acebase.query(ref);
             queryRef = this.applyFilters(clone, queryRef);
-            if(clone["searchString"]  && typeof clone["searchString"] == "string"){
-                queryRef.filter(SEARCH_FIELD,"like", "*" +  clone["searchString"]  +"*")
+            if (
+                clone["searchString"] &&
+                typeof clone["searchString"] == "string"
+            ) {
+                queryRef.filter(
+                    SEARCH_FIELD,
+                    "like",
+                    "*" + clone["searchString"] + "*"
+                );
             }
+            const { skip,limit,page,filters, exclusion,inclusion,sort, searchString } = clone
+            let transactionCopy = {ref,filters,skip,limit,page,exclusion,inclusion,sort, searchString}
             let count = await queryRef.count();
-            let data = (await queryRef.get()).map((snap) => snap.val());
+            if (live && live == true && cuid.isCuid(subscriptionKey)) {
+                await this.emitter.emit("setLiveQueryRefference", {
+                    transaction: transactionCopy,
+                    subscriptionKey,
+                });
+            }
+            let data: any[] = []
+            if(Array.isArray(exclusion) &&  exclusion.length || Array.isArray(inclusion) && inclusion.length){
+                if(exclusion?.length && inclusion?.length){
+                    data = (await queryRef.get({exclude: exclusion, include: inclusion})).map((snap) => snap.val());
+                }else if(exclusion?.length){
+                    data = (await queryRef.get({exclude: exclusion})).map((snap) => snap.val());
+                }else if(inclusion?.length){
+                    data = (await queryRef.get({include: inclusion})).map((snap) => snap.val());
+                }
+            }else{
+                data = (await queryRef.get()).map((snap) => snap.val());
+            }
+            //! todo return decorated data
             if (executeHook) {
-                this.ExecuteHook(
+                const afterHookData = this.ExecuteHook(
                     "afterFind",
                     ref,
-                    {},
+                    { data, count },
                     server?.req,
                     server?.res
                 );
+                if (
+                    Array.isArray(afterHookData?.data) &&
+                    isNumber(afterHookData?.count)
+                ) {
+                    return {
+                        data: afterHookData.data,
+                        count: afterHookData.count,
+                    };
+                }
             }
             return { data, count };
         } catch (error) {
@@ -725,6 +778,46 @@ export default class Serializer {
             throw new Error(error);
         }
     }
+
+    async LivePayload(
+        transaction: {
+            skip: number,
+            limit: number,
+            page:number,
+            exclusion: string[],
+            inclusion: string[],
+            sort: any[],
+            filters:any[],
+            ref:string,
+            searchString: string
+        },
+        eventEmitted: RealtimeQueryEvent
+    ) {
+        let index = -1;
+        let count = 0;
+        let data: any = {};
+        let dataQuery = this.applyFilters(transaction,this.acebase.query(transaction.ref))
+        let countQuery = this.applyFilters(transaction,this.acebase.query(transaction.ref))
+        if(transaction?.searchString){
+            dataQuery.filter(SEARCH_FIELD, "like",`*${transaction.searchString}*`)
+            countQuery.filter(SEARCH_FIELD, "like",`*${transaction.searchString}*`)
+        }
+
+        
+        if (eventEmitted?.snapshot) {
+            data = eventEmitted.snapshot.val();
+        } else {
+            data = (await eventEmitted.ref.get()).val();
+        }
+        index = (await dataQuery.get({ include: ["key"] }))
+            .map(function (v){
+                return v.val().key
+            })
+            .findIndex((v) => v == data.key);
+        count = await countQuery.take(1000000000000).count();
+        return { data, count, index };
+    }
+
 
     applyFilters(payload: any, queryRef: DataReferenceQuery) {
         //! Must intercept the filters when they query keys that dont belong to them

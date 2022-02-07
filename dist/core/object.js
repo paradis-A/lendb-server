@@ -7,22 +7,16 @@ const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
 const normalize_1 = __importDefault(require("./normalize"));
 class LenObject {
-    key;
-    ref;
-    created_at;
-    updated_at;
-    loadedRawData;
-    childProps;
-    singular = false;
-    operation;
-    eventHandles = { hook: true, emit: true };
-    serializer;
     constructor(ref, singularOrKey = false, serializer) {
+        this.singular = false;
+        this.eventHandles = {
+            hook: true,
+            emit: true,
+        };
         this.operation = "save";
         this.serializer = serializer;
         this.key = (0, cuid_1.default)();
-        if (typeof singularOrKey == "string" &&
-            cuid_1.default.isCuid(singularOrKey)) {
+        if (typeof singularOrKey == "string" && cuid_1.default.isCuid(singularOrKey)) {
             this.key = singularOrKey;
         }
         else if (typeof singularOrKey == "boolean" && singularOrKey) {
@@ -33,8 +27,16 @@ class LenObject {
     }
     async destroy(serverOpts = { emit: false, hook: false }) {
         try {
-            let payload = { key: this.key, ref: this.ref, operation: "destroy", singular: this.singular };
-            payload.eventHandles = { hook: serverOpts.hook, emit: serverOpts.emit };
+            let payload = {
+                key: this.key,
+                ref: this.ref,
+                operation: "destroy",
+                singular: this.singular,
+            };
+            payload.eventHandles = {
+                hook: serverOpts.hook,
+                emit: serverOpts.emit,
+            };
             let res = await this.serializer.Execute(payload);
             return Promise.resolve(res);
         }
@@ -56,10 +58,13 @@ class LenObject {
                     operation: clone?.operation,
                     ref: clone.ref,
                     key: clone?.key,
-                    sing: clone?.singular
+                    sing: clone?.singular,
                 });
             }
-            clone.eventHandles = { hook: serverOpts.hook, emit: serverOpts.emit };
+            clone.eventHandles = {
+                hook: serverOpts.hook,
+                emit: serverOpts.emit,
+            };
             let res = await this.serializer.Execute(clone);
             this.operation = "save";
             return Promise.resolve(res);
@@ -83,7 +88,12 @@ class LenObject {
      */
     async load(serverOpts = { hook: false }) {
         try {
-            let payload = { operation: "load", key: this.key, ref: this.ref, singular: this.singular };
+            let payload = {
+                operation: "load",
+                key: this.key,
+                ref: this.ref,
+                singular: this.singular,
+            };
             payload.eventHandles = { hook: serverOpts.hook };
             let res = await this.serializer.Execute(payload);
             if (res) {

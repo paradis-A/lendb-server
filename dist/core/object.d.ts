@@ -42,3 +42,12 @@ export default class LenObject {
      */
     toDestroy(yes?: boolean): this;
 }
+export interface ObjectLink {
+    target: string;
+    source: string;
+    identity: string;
+    fields: {
+        targetField: string;
+        sourceField: string;
+    }[];
+}

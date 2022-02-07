@@ -7,26 +7,35 @@ const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
 const SEARCH_FIELD = "__search_field__";
 class Serializer {
-    acebase;
-    emitter;
-    refHooks;
-    authHook;
-    auth;
-    links;
-    searchables;
-    constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth, link, searchables) {
+    constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth, link, publisher) {
         this.acebase = acebaseInstance;
         this.emitter = emitteryInstance;
         this.refHooks = refHook;
         this.authHook = authHook;
         this.links = link;
         this.auth = auth;
-        this.searchables = searchables;
+        this.publisher = publisher;
+        // this.searchables = searchables;
     }
     async Execute(payload, server) {
         try {
             let result = {};
+            let resultArray = [];
             if (Array.isArray(payload)) {
+                //run acl and schema validation here
+                //cache the old value and rollback when error occurs
+                for (const transaction of payload) {
+                    if (!["save", "destroy"].includes(transaction?.operation)) {
+                        throw new Error("Error: Invalid operation");
+                    }
+                    if (transaction?.operation == "save") {
+                        resultArray.push(await this.Save(transaction, server));
+                    }
+                    else if (transaction?.operation == "destroy") {
+                        resultArray.push(await this.Destroy(transaction, server));
+                    }
+                }
+                return resultArray;
             }
             else {
                 const operations = [
@@ -68,17 +77,9 @@ class Serializer {
             return Promise.reject(error);
         }
     }
-    GetHook(event, ref) {
-        if (ref && typeof ref == "string" && event) {
-            return this.refHooks.find((h) => h.ref == ref && h.event == event);
-        }
-        else if (event && !ref) {
-            return this.authHook.find((a) => a.event == event);
-        }
-    }
     ExecuteHook(event, ref, data, req, res, user) {
         if (ref && typeof ref == "string" && event) {
-            this.refHooks
+            return this.refHooks
                 .find((h) => h.ref == ref && h.event == event)
                 ?.callback(data, req, res, user);
         }
@@ -211,26 +212,28 @@ class Serializer {
             return Promise.reject(error);
         }
     }
-    // protected async Exists(transaction: any) {
-    //     try {
-    //         const { key, ref, singular } = transaction;
-    //         let result = false;
-    //         if (singular) {
-    //             result = await this.acebase.ref(ref).exists();
-    //         } else {
-    //             let splitted = ref.split("/");
-    //             const last = splitted[splitted.length - 1];
-    //             if (cuid.isCuid(last)) {
-    //                 splitted[splitted.length - 1] = key;
-    //             } else {
-    //                 splitted.push(key);
-    //             }
-    //             const joined = splitted.join("/");
-    //             console.log(joined);
-    //             result = await this.acebase.ref(joined).exists();
-    //         }
-    //     } catch (error) {}
-    // }
+    async Exists(transaction) {
+        try {
+            const { key, ref, singular } = transaction;
+            let result = false;
+            if (singular) {
+                result = await this.acebase.ref(ref).exists();
+            }
+            else {
+                let splitted = ref.split("/");
+                const last = splitted[splitted.length - 1];
+                if (cuid_1.default.isCuid(last)) {
+                    splitted[splitted.length - 1] = key;
+                }
+                else {
+                    splitted.push(key);
+                }
+                const joined = splitted.join("/");
+                result = await this.acebase.ref(joined).exists();
+            }
+        }
+        catch (error) { }
+    }
     async Load(transaction, server) {
         try {
             //! Must intercept the ref when the keys that dont belong to them
@@ -325,26 +328,35 @@ class Serializer {
             const emit = eventHandles?.emit;
             const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
-            console.log("Execute hook: " + executeHook + "  emit: " + executeEmit);
             let data = this.getData(Object.assign({}, transaction));
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
             !singular || delete data.key;
             let instance = this.acebase.ref(refference);
             const exists = await instance.exists();
-            if (exists)
-                data.updated_at = new Date(Date.now());
-            else
-                data.created_at = new Date(Date.now());
             const event = {
                 before: exists ? "beforeUpdate" : "beforeAdd",
                 after: exists ? "afterUpdate" : "afterAdd",
             };
             if (executeHook) {
-                this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
+                const hookData = this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
+                if (hookData && (0, lodash_1.isObject)(hookData) && !(0, lodash_1.isDate)(hookData)) {
+                    Object.assign(data, hookData);
+                }
             }
+            if (exists)
+                data.updated_at = new Date(Date.now());
+            else
+                data.created_at = new Date(Date.now());
             if (SEARCH_FIELD in data) {
                 delete data[SEARCH_FIELD];
+            }
+            for (const entry of Object.entries(data)) {
+                //@ts-ignore
+                if ((0, lodash_1.isDate)(entry[0])) {
+                    //@ts-ignore
+                    data[entry[0]] = new Date(entry[1]);
+                }
             }
             this.ProcessLink(refference, key, data);
             let searchField = this.generateSearchString(data);
@@ -358,18 +370,17 @@ class Serializer {
             await this.autoIndex(hookRef, data);
             delete data[searchField];
             let returnData = (await instance.get()).val();
+            instance.off();
             if (executeHook) {
-                this.ExecuteHook(event.after, hookRef, data, server?.req, server?.res, user);
+                this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
             }
             //! access level permission when emitting for client side
             if (executeEmit) {
                 if (exists) {
-                    console.log("Emit ref from server is: " + "update:" + hookRef, data);
-                    this.emitter.emit("update:" + hookRef, data);
+                    this.emitter.emit("update:" + hookRef, returnData);
                 }
                 else {
-                    console.log("Emit ref from server is: " + "add:" + hookRef, data);
-                    this.emitter.emit("add:" + hookRef, data);
+                    this.emitter.emit("add:" + hookRef, returnData);
                 }
             }
             return Promise.resolve(returnData);
@@ -437,8 +448,7 @@ class Serializer {
             throw error;
         }
     }
-    aggregatedQuery() {
-    }
+    // protected aggregatedQuery() {}
     generateSearchString(data) {
         if ((0, lodash_1.isObject)(data) && !(0, lodash_1.isDate)(data)) {
             let word = "";
@@ -577,24 +587,58 @@ class Serializer {
     }
     async Query(transaction, server) {
         try {
-            const { ref, hook } = transaction;
+            const { ref, hook, live, subscriptionKey } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
                 return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
-            const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
-            if (executeHook) {
-                this.ExecuteHook("beforeFind", ref, {}, server?.req, server?.res);
-            }
             let clone = (0, lodash_1.cloneDeep)(transaction);
             let queryRef = this.acebase.query(ref);
+            const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
+            if (executeHook) {
+                const hookedQuery = this.ExecuteHook("beforeFind", ref, clone, server?.req, server?.res);
+                if (hookedQuery) {
+                    clone = hookedQuery;
+                }
+            }
             queryRef = this.applyFilters(clone, queryRef);
-            if (clone["searchString"] && typeof clone["searchString"] == "string") {
+            if (clone["searchString"] &&
+                typeof clone["searchString"] == "string") {
                 queryRef.filter(SEARCH_FIELD, "like", "*" + clone["searchString"] + "*");
             }
+            const { skip, limit, page, filters, exclusion, inclusion, sort, searchString } = clone;
+            let transactionCopy = { ref, filters, skip, limit, page, exclusion, inclusion, sort, searchString };
             let count = await queryRef.count();
-            let data = (await queryRef.get()).map((snap) => snap.val());
+            if (live && live == true && cuid_1.default.isCuid(subscriptionKey)) {
+                await this.emitter.emit("setLiveQueryRefference", {
+                    transaction: transactionCopy,
+                    subscriptionKey,
+                });
+            }
+            let data = [];
+            if (Array.isArray(exclusion) && exclusion.length || Array.isArray(inclusion) && inclusion.length) {
+                if (exclusion?.length && inclusion?.length) {
+                    data = (await queryRef.get({ exclude: exclusion, include: inclusion })).map((snap) => snap.val());
+                }
+                else if (exclusion?.length) {
+                    data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
+                }
+                else if (inclusion?.length) {
+                    data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
+                }
+            }
+            else {
+                data = (await queryRef.get()).map((snap) => snap.val());
+            }
+            //! todo return decorated data
             if (executeHook) {
-                this.ExecuteHook("afterFind", ref, {}, server?.req, server?.res);
+                const afterHookData = this.ExecuteHook("afterFind", ref, { data, count }, server?.req, server?.res);
+                if (Array.isArray(afterHookData?.data) &&
+                    (0, lodash_1.isNumber)(afterHookData?.count)) {
+                    return {
+                        data: afterHookData.data,
+                        count: afterHookData.count,
+                    };
+                }
             }
             return { data, count };
         }
@@ -603,6 +647,30 @@ class Serializer {
                 return Promise.resolve({ data: [], count: 0 });
             throw new Error(error);
         }
+    }
+    async LivePayload(transaction, eventEmitted) {
+        let index = -1;
+        let count = 0;
+        let data = {};
+        let dataQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
+        let countQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
+        if (transaction?.searchString) {
+            dataQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
+            countQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
+        }
+        if (eventEmitted?.snapshot) {
+            data = eventEmitted.snapshot.val();
+        }
+        else {
+            data = (await eventEmitted.ref.get()).val();
+        }
+        index = (await dataQuery.get({ include: ["key"] }))
+            .map(function (v) {
+            return v.val().key;
+        })
+            .findIndex((v) => v == data.key);
+        count = await countQuery.take(1000000000000).count();
+        return { data, count, index };
     }
     applyFilters(payload, queryRef) {
         //! Must intercept the filters when they query keys that dont belong to them

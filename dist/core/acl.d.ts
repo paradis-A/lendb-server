@@ -1,11 +1,10 @@
 export interface ACL {
-    ref: string
+    ref: string;
     read: ACLPermision;
-    add: ACLPermision
-    update: ACLPermision
-    destroy: ACLPermision
+    add: ACLPermision;
+    update: ACLPermision;
+    destroy: ACLPermision;
 }
-
 export interface ACLPermision {
     allow: boolean;
     fields: "*" | string[];

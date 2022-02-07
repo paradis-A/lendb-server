@@ -4,8 +4,10 @@ exports.RegisterHook = exports.RefHooks = exports.Authhooks = void 0;
 exports.Authhooks = [];
 exports.RefHooks = [];
 class Hook {
-    _refhooks = [];
-    _authHooks = [];
+    constructor() {
+        this._refhooks = [];
+        this._authHooks = [];
+    }
     addOrReplaceRefHook(hook) {
         const { ref: table, event } = hook;
         const el = this._refhooks.findIndex((h) => h.ref == table && h.event == event);

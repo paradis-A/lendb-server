@@ -15,5 +15,4 @@ var hook_1 = require("./hook");
 Object.defineProperty(exports, "Hook", { enumerable: true, get: function () { return __importDefault(hook_1).default; } });
 var auth_1 = require("./auth");
 Object.defineProperty(exports, "Auth", { enumerable: true, get: function () { return __importDefault(auth_1).default; } });
-;
 //# sourceMappingURL=index.js.map

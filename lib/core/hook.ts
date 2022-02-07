@@ -3,6 +3,7 @@ import Request from "hyper-express/types/components/http/Request";
 import Response from "hyper-express/types/components/http/Response";
 export let Authhooks: iAuthHook[] = [];
 export let RefHooks: iRefHook[] = [];
+import iLenQueryFilter from "extras/queryfilter";
 import {Account} from "./auth"
 export default class Hook {
     protected _refhooks: iRefHook[] = [];
@@ -69,14 +70,14 @@ export default class Hook {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "afterDestroy" });
     }
 
-    beforeFind(ref: string, callback: (query: LenQuery) => any) {
+    beforeFind(ref: string, callback: (query: iLenQueryFilter) => any) {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "beforeFind" });
     }
 
-    afterFind(ref: string, callback: (data: any) => any) {
+    afterFind(ref: string, callback: (data: any[]) => any) {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "afterFind" });
     }
-
+    
     befereLoad(
         ref: string,
         callback: (data: any, req?: Request, res?: Response) => any
@@ -153,3 +154,5 @@ export interface iAuthHook {
     event: iAuthEvent;
     callback: (e: any) => void;
 }
+
+

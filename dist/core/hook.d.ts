@@ -1,8 +1,8 @@
-import type LenQuery from "./query";
 import Request from "hyper-express/types/components/http/Request";
 import Response from "hyper-express/types/components/http/Response";
 export declare let Authhooks: iAuthHook[];
 export declare let RefHooks: iRefHook[];
+import iLenQueryFilter from "extras/queryfilter";
 import { Account } from "./auth";
 export default class Hook {
     protected _refhooks: iRefHook[];
@@ -15,8 +15,8 @@ export default class Hook {
     afterUpdate(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     beforeDestroy(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     afterDestroy(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
-    beforeFind(ref: string, callback: (query: LenQuery) => any): void;
-    afterFind(ref: string, callback: (data: any) => any): void;
+    beforeFind(ref: string, callback: (query: iLenQueryFilter) => any): void;
+    afterFind(ref: string, callback: (data: any[]) => any): void;
     befereLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     afterLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     beforeLogin(callback: (usernameOrEmail: string, password: string) => void): void;

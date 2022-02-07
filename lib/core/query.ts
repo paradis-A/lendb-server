@@ -1,25 +1,25 @@
-import { DataReferenceQuery } from "acebase-core";
 import Emittery from "emittery";
 import cuid from "cuid";
-import { cloneDeep, xor } from "lodash";
+import { cloneDeep } from "lodash";
 import { Serializer } from "./";
 import Normalize from "./normalize";
+import { AceBase } from "acebase";
 export default class LenQuery {
-    protected filters: any[] = [];
     protected ref: string;
+    filters: any = {}
+    sorts: { [any: string]: "ASC" | "DESC" | null } = {}
     skip: number = 0;
     limit: number = 100;
     page: number = 0;
     protected operation: string;
     protected exclusion: string[] = [];
     protected inclusion: string[] = [];
-    protected searchString: string;
-    protected sorts: any[] = [];
+    searchString: string;
     protected serializer: Serializer;
     protected emitter: Emittery;
     protected unsubscribePrevious: Function = null;
     protected hook: boolean
-    constructor(ref: string, emitter: Emittery, serializer: Serializer) {
+    constructor(ref: string, emitter: Emittery, serializer: Serializer,acebase?: AceBase) {
         this.serializer = serializer;
         this.emitter = emitter;
         this.ref = ref;
@@ -31,7 +31,7 @@ export default class LenQuery {
         let val = "*" + value + "*";
         if (pattern == "left") val = "*" + value;
         if (pattern == "right") val = value + "*";
-        this.filters.push([field, "like", val]);
+        this.filters[field+"[like]"] = val
         return this;
     }
 
@@ -39,82 +39,93 @@ export default class LenQuery {
         let val = "*" + value + "*";
         if (pattern == "left") val = "*" + value;
         if (pattern == "right") val = value + "*";
-        this.filters.push([field, "!like", val]);
+        this.filters[field+"[!like]"] = val
         return this;
     }
 
     gt(field: string, value: any) {
-        this.filters.push([field, ">", value]);
+        this.filters[field+"[>]"] = value
         return this;
     }
 
     gte(field: string, value: any) {
-        this.filters.push([field, ">=", value]);
+        this.filters[field+"[>=]"] = value
+        return this;
+    }
+
+    between(field: string, value: any) {
+        this.filters[field+"[between]"] = value
+        return this;
+    }
+
+    notBetween(field: string, value: any) {
+        this.filters[field+"[!between]"] = value
         return this;
     }
 
     lt(field: string, value: any) {
-        this.filters.push([field, "<", value]);
+        this.filters[field+"[<]"] = value
         return this;
     }
 
     lte(field: string, value: any) {
-        this.filters.push([field, "<=", value]);
+        this.filters[field+"[<=]"] = value
         return this;
     }
 
     eq(field: string, value: any) {
-        this.filters.push([field, "==", value]);
+        this.filters[field+"[eq]"] = value
         return this;
     }
 
     notEq(field: string, value: any) {
-        this.filters.push([field, "!=", value]);
+        this.filters[field+"[!=]"] = value
         return this;
     }
 
     in(field: string, value: any[]) {
-        this.filters.push([field, "in", value]);
+        this.filters[field+"[in]"] = value
         return this;
     }
 
     notIn(field: string, value: any[]) {
-        this.filters.push([field, "!in", value]);
+        this.filters[field+"[!in]"] = value
         return this;
     }
 
     matches(field: string, value: any[]) {
-        this.filters.push([field, "matches", value]);
+        this.filters[field+"[matches]"] = value
         return this;
     }
 
     notMatches(field: string, value: any[]) {
-        this.filters.push([field, "!matches", value]);
+        this.filters[field+"[!matches]"] = value
         return this;
     }
 
     has(field: string, value: any[]) {
-        this.filters.push([field, "has", value]);
+        this.filters[field+"[has]"] = value
         return this;
     }
 
     notHas(field: string, value: any[]) {
-        this.filters.push([field, "!has", value]);
+        this.filters[field]["!has"] = value
         return this;
     }
 
     contains(field: string, value: any[]) {
-        this.filters.push([field, "contains", value]);
+        this.filters[field]["contains"] = value
         return this;
     }
 
     notContains(field: string, value: any[]) {
-        this.filters.push([field, "!contains", value]);
+        this.filters[field]["!contains"] = value
         return this;
     }
 
     sort(field: string, asc = false) {
-        this.sorts.push([field, asc]);
+        this.sorts[field] = asc? "ASC" : "DESC";
+        return this;
     }
 
     exclude(fields: string[]) {
@@ -137,34 +148,6 @@ export default class LenQuery {
         return clone;
     }
 
-    async watch(cb: (event: iLiveQuery) => void, fetchOptions:  { page?: number; limit?: number; hook?: boolean } = {
-            hook: false,
-        }) {
-        let events = new iLiveQuery()
-        console.log("Emit ref from client is: " + "add:" + this.toWildCardPath(this.ref))
-        cb(events)
-        if(events.getEvent("add")){
-            this.emitter.on("add:" + this.toWildCardPath(this.ref),
-            data=>{
-                events.getEvent("add")(data)
-            })
-        }
-        if(events.getEvent("update")){
-            this.emitter.on("update:" + this.toWildCardPath(this.ref),
-            data=>{
-                events.getEvent("update")(data)
-            })
-        }
-
-        if(events.getEvent("destroy")){
-            this.emitter.on("destroy:" + this.toWildCardPath(this.ref),
-            data=>{
-                events.getEvent("destroy")(data)
-            })
-        }
-
-        return await this.fetch(fetchOptions)
-    }
 
     protected toWildCardPath(ref: string) {
         return ref
@@ -196,7 +179,6 @@ export default class LenQuery {
                     return Normalize(data)
                 })
             }
-            
             res.data = tempData
             return Promise.resolve(res);
         } catch (error) {
