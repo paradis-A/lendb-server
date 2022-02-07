@@ -7,7 +7,7 @@ exports.LenDB = void 0;
 const hyper_express_1 = __importDefault(require("hyper-express"));
 const acebase_1 = require("acebase");
 const core_1 = require("./core");
-const figlet_1 = __importDefault(require("figlet"));
+// import Figlet from "figlet";
 const emittery_1 = __importDefault(require("emittery"));
 const live_directory_1 = __importDefault(require("live-directory"));
 const graceful_fs_1 = __importDefault(require("graceful-fs"));
@@ -21,11 +21,14 @@ class LenDB {
         this.liveQueryRefferences = [];
         this.Server = new hyper_express_1.default.Server({ max_body_length: 100000000 });
         this.acebase = new acebase_1.AceBase(appname, settings);
-        for (let i = 0; i < 8; i++) {
-            process.stdout.moveCursor(0, -1); // up one line
-            process.stdout.clearLine(1); //
-        }
-        let title = figlet_1.default.textSync("LenDB Server\r\r", "Doom").replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, "");
+        // for (let i = 0; i < 8; i++) {
+        //     process.stdout.moveCursor(0, -1); // up one line
+        //     process.stdout.clearLine(1); //
+        // }
+        // let title = Figlet.textSync("LenDB Server\r\r", "Doom").replace(
+        //     /^(?=\n)$|^\s*|\s*$|\n\n+/gm,
+        //     ""
+        // );
         this.auth = new core_1.Auth(this.acebase);
         this.emitter = new emittery_1.default();
         this.hook = new core_1.Hook();

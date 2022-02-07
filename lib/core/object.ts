@@ -1,7 +1,7 @@
 import cuid from "cuid";
 import { cloneDeep } from "lodash";
 import { Serializer } from "./";
-import Normalize from "./normalize";
+// import Normalize from "./normalize";
 export default class LenObject {
     public key: string;
     protected ref: string;
@@ -15,7 +15,7 @@ export default class LenObject {
         hook: true,
         emit: true,
     };
-
+    
     protected serializer: Serializer;
     constructor(
         ref: string,

@@ -145,7 +145,7 @@ export default class LenQuery {
         this.searchString = word;
         return this;
     }
-
+    
     protected stripNonQuery(clone: this) {
         delete clone.serializer;
         delete clone.emitter;
@@ -166,7 +166,7 @@ export default class LenQuery {
         options: { page?: number; limit?: number; hook?: boolean } = {
             hook: false,
         }
-    ): Promise<{ data: any; count: number }> {
+    ): Promise<{ data: any[]; count: number }> {
         try {
             if (
                 this.ref.includes("__users__") ||

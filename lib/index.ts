@@ -10,7 +10,7 @@ import {
     ACL as ACLConfig,
 } from "./core";
 export type { LenObject, LenQuery } from "./core";
-import Figlet from "figlet";
+// import Figlet from "figlet";
 import Emittery from "emittery";
 import LiveDirectory from "live-directory";
 import fs from "graceful-fs";
@@ -51,14 +51,14 @@ export class LenDB {
     ) {
         this.Server = new HyperExpress.Server({ max_body_length: 100000000 });
         this.acebase = new AceBase(appname, settings);
-        for (let i = 0; i < 8; i++) {
-            process.stdout.moveCursor(0, -1); // up one line
-            process.stdout.clearLine(1); //
-        }
-        let title = Figlet.textSync("LenDB Server\r\r", "Doom").replace(
-            /^(?=\n)$|^\s*|\s*$|\n\n+/gm,
-            ""
-        );
+        // for (let i = 0; i < 8; i++) {
+        //     process.stdout.moveCursor(0, -1); // up one line
+        //     process.stdout.clearLine(1); //
+        // }
+        // let title = Figlet.textSync("LenDB Server\r\r", "Doom").replace(
+        //     /^(?=\n)$|^\s*|\s*$|\n\n+/gm,
+        //     ""
+        // );
         this.auth = new Auth(this.acebase);
         this.emitter = new Emittery();
         this.hook = new Hook();

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
+// import Normalize from "./normalize";
 class LenObject {
     constructor(ref, singularOrKey = false, serializer) {
         this.singular = false;
