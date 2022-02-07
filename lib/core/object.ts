@@ -115,7 +115,7 @@ export default class LenObject {
      * through constructor.
      * Will return null if object do not exist,
      */
-    async load(serverOpts = { hook: false }): Promise<any> {
+    async load(serverOpts = { hook: false }): Promise<this> {
         try {
             let payload: any = {
                 operation: "load",
@@ -126,9 +126,9 @@ export default class LenObject {
             payload.eventHandles = { hook: serverOpts.hook };
             let res = await this.serializer.Execute(payload);
             if (res) {
-                return Promise.resolve(Normalize(res));
+                return Promise.resolve(this.assign(res));
             } else {
-                return Promise.resolve({ key: this.key });
+                return Promise.resolve(this);
             }
         } catch (error) {
             return Promise.reject(error);

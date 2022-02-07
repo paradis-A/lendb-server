@@ -47,5 +47,8 @@ export default class LenQuery {
         page?: number;
         limit?: number;
         hook?: boolean;
-    }): Promise<any>;
+    }): Promise<{
+        data: any;
+        count: number;
+    }>;
 }

@@ -136,7 +136,8 @@ class LenQuery {
         hook: false,
     }) {
         try {
-            if (this.ref.includes("__users__") || this.ref.includes("__tokens__")) {
+            if (this.ref.includes("__users__") ||
+                this.ref.includes("__tokens__")) {
                 return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
             const { page, limit, hook } = options;
@@ -149,7 +150,7 @@ class LenQuery {
             let res = await this.serializer.Execute(clone);
             let tempData = res?.data;
             if (tempData && Array.isArray(tempData)) {
-                tempData = tempData.map(data => {
+                tempData = tempData.map((data) => {
                     return (0, normalize_1.default)(data);
                 });
             }

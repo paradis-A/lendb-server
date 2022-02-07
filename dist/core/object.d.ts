@@ -31,7 +31,7 @@ export default class LenObject {
      */
     load(serverOpts?: {
         hook: boolean;
-    }): Promise<any>;
+    }): Promise<this>;
     assign(data: any): this;
     clone(): this;
     /**

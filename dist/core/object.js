@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
-const normalize_1 = __importDefault(require("./normalize"));
 class LenObject {
     constructor(ref, singularOrKey = false, serializer) {
         this.singular = false;
@@ -112,10 +111,10 @@ class LenObject {
             payload.eventHandles = { hook: serverOpts.hook };
             let res = await this.serializer.Execute(payload);
             if (res) {
-                return Promise.resolve((0, normalize_1.default)(res));
+                return Promise.resolve(this.assign(res));
             }
             else {
-                return Promise.resolve({ key: this.key });
+                return Promise.resolve(this);
             }
         }
         catch (error) {
