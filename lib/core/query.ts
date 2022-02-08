@@ -1,6 +1,6 @@
 import Emittery from "emittery";
 import cuid from "cuid";
-import { cloneDeep } from "lodash";
+import { cloneDeep, isObject } from "lodash";
 import { Serializer } from "./";
 import Normalize from "./normalize";
 import { AceBase } from "acebase";
@@ -179,6 +179,70 @@ export default class LenQuery {
             const { page, limit, hook } = options;
             this.hook = hook;
             let clone = this.stripNonQuery(cloneDeep(this));
+            //clear white spaces ons earch string
+            if (clone.searchString) {
+                console.log(clone.searchString);
+                let noWhiteSpace = clone.searchString.split(" ");
+                if (noWhiteSpace.every((v) => v == "")) {
+                    delete clone.searchString;
+                }
+                if (!clone.searchString.length) {
+                    delete clone.searchString;
+                }
+            }
+            if(clone.filters && isObject(clone.filters) &&  Object.entries(clone.filters).length){
+                let tempFilters = []
+                for (const entry of Object.entries(clone.filters)) {
+                    let key = entry[0]
+                    let value = entry[1]
+                    if(key.includes("[") || key.includes("]")){
+                        let start = key.indexOf("[")
+                        let end = key.indexOf("]")
+                        if(start == -1 || end == -1){
+                            throw new Error("Filter must be enclosed with []")
+                        }
+                        let filter = key.substring(start + 1,end)
+                        let field = key.substring(0,start)
+                        if(operatorBasis.includes(filter)){
+                            if(filter=="in" && !Array.isArray(value)) throw new Error("Invalid filter")
+                            if(filter=="between" && !Array.isArray(value)) throw new Error("Invalid filter")
+                            if(filter.startsWith("not")){
+                                tempFilters.push([field,filter.substring(2).toLowerCase(),value])
+                            }else{
+                                tempFilters.push([field,filter,value])
+                            }
+                        }else{
+                            throw new Error("Invalid filter")
+                        }
+                    }else{
+                        if(Array.isArray(value)){
+                            tempFilters.push([key,"in",value])
+                        }else{
+                            tempFilters.push([key,"==",value])
+                        }
+                    }
+                }
+                //@ts-ignore
+                clone.filters = tempFilters
+            } else{
+                //@ts-ignore
+                clone.filters = []
+            }
+            if(clone.sorts && isObject(clone.sorts) && Object.entries(clone.sorts).length){
+                let tempSorts = []
+                for (const entry of Object.entries(clone.sorts)) {
+                    let key = entry[0]
+                    let value = entry[1]
+                    if(value == "ASC"){
+                        tempSorts.push([key,true])
+                    }else if(value== "DESC"){
+                        tempSorts.push([key,false])
+                    }
+                }
+                //@ts-ignore
+                clone.sorts = tempSorts
+                console.log(tempSorts)
+            }
             if (page && typeof page == "number") clone.page = page;
             if (limit && typeof limit == "number") clone.limit = limit;
             let res = await this.serializer.Execute(clone);
@@ -223,3 +287,31 @@ class iLiveQuery {
         if (event == "destroy") return this.update;
     }
 }
+
+const operatorBasis = [
+    "eq",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "like",
+    "in",
+    "has",
+    "notHas",
+    "contains",
+    "notContains",
+    "notLike",
+    "between",
+    "notIn",
+    "notBetween",
+    "matches",
+    "notEq",
+    "notMatches",
+    "!eq",
+    "!has",
+    "!contains",
+    "!like",
+    "!between",
+    "!in",
+    "!matches",
+]
