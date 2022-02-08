@@ -206,8 +206,18 @@ export default class LenQuery {
                         if(operatorBasis.includes(filter)){
                             if(filter=="in" && !Array.isArray(value)) throw new Error("Invalid filter")
                             if(filter=="between" && !Array.isArray(value)) throw new Error("Invalid filter")
+                            const alphaOperators = {
+                                eq: "==",
+                                neq: "!=",
+                                gt: ">",
+                                gte: ">=",
+                                lt: "<",
+                                lte: "<="
+                            }
                             if(filter.startsWith("not")){
-                                tempFilters.push([field,filter.substring(2).toLowerCase(),value])
+                                let transformedFilter = Object.keys(alphaOperators).includes(filter.substring(2).toLowerCase()) ? 
+                                alphaOperators[filter.substring(2).toLowerCase()] : filter.substring(2).toLowerCase()
+                                tempFilters.push([field,transformedFilter,value])
                             }else{
                                 tempFilters.push([field,filter,value])
                             }
@@ -296,6 +306,7 @@ const operatorBasis = [
     "lte",
     "like",
     "in",
+    "neq",
     "has",
     "notHas",
     "contains",
@@ -314,4 +325,10 @@ const operatorBasis = [
     "!between",
     "!in",
     "!matches",
+    "==",
+    "!=",
+    ">=",
+    "<=",
+    ">",
+    "<"
 ]
