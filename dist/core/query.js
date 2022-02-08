@@ -65,7 +65,7 @@ class LenQuery {
         return this;
     }
     eq(field, value) {
-        this.filters[field + "[eq]"] = value;
+        this.filters[field + "[==]"] = value;
         return this;
     }
     notEq(field, value) {
