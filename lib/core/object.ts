@@ -15,7 +15,7 @@ export default class LenObject {
         hook: true,
         emit: true,
     };
-
+    
     protected serializer: Serializer;
     constructor(
         ref: string,
