@@ -77,6 +77,18 @@ export default class Hook {
     afterFind(ref: string, callback: (data: any[]) => any) {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "afterFind" });
     }
+
+    liveAdd(ref:string, callback: (data:any)=> any ){
+        this.addOrReplaceRefHook({ref,callback,event: "liveAdd"})
+    }
+
+    liveUpdate(ref:string, callback: (data:any)=> any ){
+        this.addOrReplaceRefHook({ref,callback,event: "liveUpdate"})
+    }
+
+    liveDestroy(ref:string, callback: (data:any)=> any ){
+        this.addOrReplaceRefHook({ref,callback,event: "liveDestroy"})
+    }
     
     befereLoad(
         ref: string,
@@ -127,6 +139,9 @@ export function RegisterHook(hook: (hook: Hook) => void) {
 export type iRefEvent =
     | "beforeAdd"
     | "afterAdd"
+    | "liveAdd"
+    | "liveDestroy"
+    | "liveUpdate"
     | "beforeUpdate"
     | "afterUpdate"
     | "beforeDestroy"

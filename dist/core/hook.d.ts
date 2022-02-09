@@ -17,6 +17,9 @@ export default class Hook {
     afterDestroy(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     beforeFind(ref: string, callback: (query: iLenQueryFilter) => any): void;
     afterFind(ref: string, callback: (data: any[]) => any): void;
+    liveAdd(ref: string, callback: (data: any) => any): void;
+    liveUpdate(ref: string, callback: (data: any) => any): void;
+    liveDestroy(ref: string, callback: (data: any) => any): void;
     befereLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     afterLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     beforeLogin(callback: (usernameOrEmail: string, password: string) => void): void;
@@ -29,7 +32,7 @@ export default class Hook {
     get authHooks(): iAuthHook[];
 }
 export declare function RegisterHook(hook: (hook: Hook) => void): void;
-export declare type iRefEvent = "beforeAdd" | "afterAdd" | "beforeUpdate" | "afterUpdate" | "beforeDestroy" | "afterDestroy" | "beforeFind" | "afterFind" | "beforeLoad" | "afterLoad";
+export declare type iRefEvent = "beforeAdd" | "afterAdd" | "liveAdd" | "liveDestroy" | "liveUpdate" | "beforeUpdate" | "afterUpdate" | "beforeDestroy" | "afterDestroy" | "beforeFind" | "afterFind" | "beforeLoad" | "afterLoad";
 export interface iRefHook {
     event: iRefEvent;
     ref: string;

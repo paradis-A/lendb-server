@@ -48,6 +48,15 @@ class Hook {
     afterFind(ref, callback) {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "afterFind" });
     }
+    liveAdd(ref, callback) {
+        this.addOrReplaceRefHook({ ref, callback, event: "liveAdd" });
+    }
+    liveUpdate(ref, callback) {
+        this.addOrReplaceRefHook({ ref, callback, event: "liveUpdate" });
+    }
+    liveDestroy(ref, callback) {
+        this.addOrReplaceRefHook({ ref, callback, event: "liveDestroy" });
+    }
     befereLoad(ref, callback) {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "beforeLoad" });
     }
