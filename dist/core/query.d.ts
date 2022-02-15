@@ -10,6 +10,7 @@ export default class LenQuery {
     skip: number;
     limit: number;
     page: number;
+    protected aggregates: Aggregate;
     protected operation: string;
     protected exclusion: string[];
     protected inclusion: string[];
@@ -43,7 +44,8 @@ export default class LenQuery {
     search(word: string): this;
     protected stripNonQuery(clone: this): this;
     protected toWildCardPath(ref: string): string;
-    fetch(options?: {
+    aggregate(groupBy: string[], cb: (ops: Aggregate) => void | Aggregate): this;
+    execute(options?: {
         page?: number;
         limit?: number;
         hook?: boolean;
@@ -52,3 +54,18 @@ export default class LenQuery {
         count: number;
     }>;
 }
+declare class Aggregate {
+    list: {
+        field: string;
+        operation: "SUM" | "COUNT" | "MIN" | "MAX" | "AVG";
+        alias: string;
+    }[];
+    groupBy: string[];
+    constructor(groupBy: string[]);
+    sum(field: string, alias: string): this;
+    count(field: string, alias: string): this;
+    min(field: string, alias: string): this;
+    max(field: string, alias: string): this;
+    avg(field: string, alias: string): this;
+}
+export {};

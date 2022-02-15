@@ -20,7 +20,7 @@ export default class Hook {
     liveAdd(ref: string, callback: (data: any) => any): void;
     liveUpdate(ref: string, callback: (data: any) => any): void;
     liveDestroy(ref: string, callback: (data: any) => any): void;
-    befereLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
+    beforeLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     afterLoad(ref: string, callback: (data: any, req?: Request, res?: Response) => any): void;
     beforeLogin(callback: (usernameOrEmail: string, password: string) => void): void;
     afterLogin(callback: (userdetails: any) => void): void;

@@ -57,7 +57,7 @@ class Hook {
     liveDestroy(ref, callback) {
         this.addOrReplaceRefHook({ ref, callback, event: "liveDestroy" });
     }
-    befereLoad(ref, callback) {
+    beforeLoad(ref, callback) {
         this.addOrReplaceRefHook({ ref: ref, callback, event: "beforeLoad" });
     }
     afterLoad(ref, callback) {

@@ -132,7 +132,12 @@ class LenQuery {
         })
             .join("/");
     }
-    async fetch(options = {
+    aggregate(groupBy, cb) {
+        this.aggregates = new Aggregate(groupBy);
+        cb(this.aggregates);
+        return this;
+    }
+    async execute(options = {
         hook: false,
     }) {
         try {
@@ -154,7 +159,9 @@ class LenQuery {
                     delete clone.searchString;
                 }
             }
-            if (clone.filters && (0, lodash_1.isObject)(clone.filters) && Object.entries(clone.filters).length) {
+            if (clone.filters &&
+                (0, lodash_1.isObject)(clone.filters) &&
+                Object.entries(clone.filters).length) {
                 let tempFilters = [];
                 for (const entry of Object.entries(clone.filters)) {
                     let key = entry[0];
@@ -178,12 +185,17 @@ class LenQuery {
                                 gt: ">",
                                 gte: ">=",
                                 lt: "<",
-                                lte: "<="
+                                lte: "<=",
                             };
                             if (filter.startsWith("not")) {
-                                let transformedFilter = Object.keys(alphaOperators).includes(filter.substring(2).toLowerCase()) ?
-                                    alphaOperators[filter.substring(2).toLowerCase()] : filter.substring(2).toLowerCase();
-                                tempFilters.push([field, transformedFilter, value]);
+                                let transformedFilter = Object.keys(alphaOperators).includes(filter.substring(2).toLowerCase())
+                                    ? alphaOperators[filter.substring(2).toLowerCase()]
+                                    : filter.substring(2).toLowerCase();
+                                tempFilters.push([
+                                    field,
+                                    transformedFilter,
+                                    value,
+                                ]);
                             }
                             else {
                                 tempFilters.push([field, filter, value]);
@@ -209,7 +221,14 @@ class LenQuery {
                 //@ts-ignore
                 clone.filters = [];
             }
-            if (clone.sorts && (0, lodash_1.isObject)(clone.sorts) && Object.entries(clone.sorts).length) {
+            if (clone.aggregates && clone?.aggregates.list.length) {
+                const { groupBy, list } = clone.aggregates;
+                //@ts-ignore
+                clone.aggregates = { groupBy, list };
+            }
+            if (clone.sorts &&
+                (0, lodash_1.isObject)(clone.sorts) &&
+                Object.entries(clone.sorts).length) {
                 let tempSorts = [];
                 for (const entry of Object.entries(clone.sorts)) {
                     let key = entry[0];
@@ -248,6 +267,33 @@ class LenQuery {
     }
 }
 exports.default = LenQuery;
+class Aggregate {
+    constructor(groupBy) {
+        this.list = [];
+        this.groupBy = [];
+        this.groupBy = groupBy;
+    }
+    sum(field, alias) {
+        this.list.push({ field, operation: "SUM", alias });
+        return this;
+    }
+    count(field, alias) {
+        this.list.push({ field, operation: "COUNT", alias });
+        return this;
+    }
+    min(field, alias) {
+        this.list.push({ field, operation: "MIN", alias });
+        return this;
+    }
+    max(field, alias) {
+        this.list.push({ field, operation: "MAX", alias });
+        return this;
+    }
+    avg(field, alias) {
+        this.list.push({ field, operation: "AVG", alias });
+        return this;
+    }
+}
 class iLiveQuery {
     constructor() {
         this.callbacks = [];
@@ -305,6 +351,6 @@ const operatorBasis = [
     ">=",
     "<=",
     ">",
-    "<"
+    "<",
 ];
 //# sourceMappingURL=query.js.map

@@ -51,14 +51,6 @@ export class LenDB {
     ) {
         this.Server = new HyperExpress.Server({ max_body_length: 100000000 });
         this.acebase = new AceBase(appname, settings);
-        // for (let i = 0; i < 8; i++) {
-        //     process.stdout.moveCursor(0, -1); // up one line
-        //     process.stdout.clearLine(1); //
-        // }
-        // let title = Figlet.textSync("LenDB Server\r\r", "Doom").replace(
-        //     /^(?=\n)$|^\s*|\s*$|\n\n+/gm,
-        //     ""
-        // );
         this.auth = new Auth(this.acebase);
         this.emitter = new Emittery();
         this.hook = new Hook();
@@ -78,7 +70,7 @@ export class LenDB {
             },
         });
     }
-
+    
     Query(ref: string) {
         return new LenQuery(ref, this.emitter, this.Serializer);
     }
@@ -86,7 +78,7 @@ export class LenDB {
     Object(ref: string, singularOrKey: boolean | string = false) {
         return new LenObject(ref, singularOrKey, this.Serializer);
     }
-
+    
     ACL(options: ACLConfig) {
         this.AccessControlList.push(options);
     }
@@ -331,6 +323,7 @@ export class LenDB {
                 res.end(error?.toString());
             }
         });
+        
         this.Server.get("/uploads/*", async (req, res) => {
             res.setHeader("Access-Control-Allow-Origin", "*");
             const path = req.path.replace("/uploads", "");

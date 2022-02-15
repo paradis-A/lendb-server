@@ -11,11 +11,6 @@ export default class LenObject {
     protected childProps: string[];
     protected singular: boolean = false;
     protected operation: "save" | "load" | "destroy" | "exists";
-    protected eventHandles: { emit?: boolean; hook?: boolean } = {
-        hook: true,
-        emit: true,
-    };
-    
     protected serializer: Serializer;
     constructor(
         ref: string,
@@ -33,7 +28,7 @@ export default class LenObject {
         }
         this.ref = ref;
     }
-
+    
     async destroy(serverOpts = { emit: false, hook: false }) {
         try {
             let payload: any = {
@@ -52,7 +47,7 @@ export default class LenObject {
             return Promise.reject(error);
         }
     }
-    
+
     async exists(): Promise<boolean> {
         try {
             let payload = {
@@ -68,7 +63,7 @@ export default class LenObject {
         }
     }
 
-    async commit(serverOpts = { emit: true, hook: false }): Promise<any> {
+    async commit(serverOpts = { emit: true, hook: false, queue: false }): Promise<any> {
         try {
             if (this.ref.includes("*")) {
                 return Promise.reject(
@@ -92,6 +87,7 @@ export default class LenObject {
             clone.eventHandles = {
                 hook: serverOpts.hook,
                 emit: serverOpts.emit,
+                queue: serverOpts.queue
             };
             let res = await this.serializer.Execute(clone);
             this.operation = "save";
@@ -100,7 +96,7 @@ export default class LenObject {
             return Promise.reject(error);
         }
     }
-
+    
     protected stripNonData(clone: this) {
         delete clone.created_at;
         delete clone.updated_at;
@@ -168,7 +164,6 @@ export default class LenObject {
     toObject() {
         let temp = cloneDeep(this);
         delete temp.childProps;
-        delete temp.eventHandles;
         delete temp.loadedRawData;
         delete temp.singular;
         delete temp.ref;

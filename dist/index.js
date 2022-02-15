@@ -21,14 +21,6 @@ class LenDB {
         this.liveQueryRefferences = [];
         this.Server = new hyper_express_1.default.Server({ max_body_length: 100000000 });
         this.acebase = new acebase_1.AceBase(appname, settings);
-        // for (let i = 0; i < 8; i++) {
-        //     process.stdout.moveCursor(0, -1); // up one line
-        //     process.stdout.clearLine(1); //
-        // }
-        // let title = Figlet.textSync("LenDB Server\r\r", "Doom").replace(
-        //     /^(?=\n)$|^\s*|\s*$|\n\n+/gm,
-        //     ""
-        // );
         this.auth = new core_1.Auth(this.acebase);
         this.emitter = new emittery_1.default();
         this.hook = new core_1.Hook();

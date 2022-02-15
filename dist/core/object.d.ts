@@ -8,10 +8,6 @@ export default class LenObject {
     protected childProps: string[];
     protected singular: boolean;
     protected operation: "save" | "load" | "destroy" | "exists";
-    protected eventHandles: {
-        emit?: boolean;
-        hook?: boolean;
-    };
     protected serializer: Serializer;
     constructor(ref: string, singularOrKey?: boolean | string, serializer?: Serializer);
     destroy(serverOpts?: {
@@ -22,6 +18,7 @@ export default class LenObject {
     commit(serverOpts?: {
         emit: boolean;
         hook: boolean;
+        queue: boolean;
     }): Promise<any>;
     protected stripNonData(clone: this): this;
     /**

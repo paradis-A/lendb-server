@@ -1,4 +1,3 @@
-import type LenQuery from "./query";
 import Request from "hyper-express/types/components/http/Request";
 import Response from "hyper-express/types/components/http/Response";
 export let Authhooks: iAuthHook[] = [];
@@ -23,7 +22,7 @@ export default class Hook {
     protected addOrReplaceAuthHook(hook?: iAuthHook) {
 
     }
-
+    
     beforeAdd(
         ref: string,
         callback: (data: any, req?: Request, res?: Response) => any
@@ -62,7 +61,7 @@ export default class Hook {
             event: "beforeDestroy",
         });
     }
-
+    
     afterDestroy(
         ref: string,
         callback: (data: any, req?: Request, res?: Response) => any
@@ -90,7 +89,7 @@ export default class Hook {
         this.addOrReplaceRefHook({ref,callback,event: "liveDestroy"})
     }
     
-    befereLoad(
+    beforeLoad(
         ref: string,
         callback: (data: any, req?: Request, res?: Response) => any
     ) {

@@ -9,10 +9,6 @@ const lodash_1 = require("lodash");
 class LenObject {
     constructor(ref, singularOrKey = false, serializer) {
         this.singular = false;
-        this.eventHandles = {
-            hook: true,
-            emit: true,
-        };
         this.operation = "save";
         this.serializer = serializer;
         this.key = (0, cuid_1.default)();
@@ -59,7 +55,7 @@ class LenObject {
             Promise.reject(error);
         }
     }
-    async commit(serverOpts = { emit: true, hook: false }) {
+    async commit(serverOpts = { emit: true, hook: false, queue: false }) {
         try {
             if (this.ref.includes("*")) {
                 return Promise.reject("Error: Adding or Updating must not contain wildcard path.");
@@ -79,6 +75,7 @@ class LenObject {
             clone.eventHandles = {
                 hook: serverOpts.hook,
                 emit: serverOpts.emit,
+                queue: serverOpts.queue
             };
             let res = await this.serializer.Execute(clone);
             this.operation = "save";
@@ -152,7 +149,6 @@ class LenObject {
     toObject() {
         let temp = (0, lodash_1.cloneDeep)(this);
         delete temp.childProps;
-        delete temp.eventHandles;
         delete temp.loadedRawData;
         delete temp.singular;
         delete temp.ref;

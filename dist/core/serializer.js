@@ -5,8 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
+const console_1 = require("console");
 const SEARCH_FIELD = "__search_field__";
 class Serializer {
+    // protected Queue: { [ref: string]: Queue };
     constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth, link, publisher) {
         this.acebase = acebaseInstance;
         this.emitter = emitteryInstance;
@@ -69,6 +71,9 @@ class Serializer {
                     }
                     case "destroy": {
                         result = await this.Destroy(transaction, server);
+                        break;
+                    }
+                    case "aggregate": {
                         break;
                     }
                     default:
@@ -225,7 +230,7 @@ class Serializer {
             }
             else {
                 let splitted = ref.split("/");
-                if (splitted.some(s => s.includes("*"))) {
+                if (splitted.some((s) => s.includes("*"))) {
                     return Promise.reject("Wildcards not supported on checking if refference exists");
                 }
                 // if(cuid.isCuid(splitted[splitted.length - 1])) return Promise.reject("")
@@ -331,6 +336,7 @@ class Serializer {
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
+            const queue = eventHandles?.queue;
             const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             let data = this.getData(Object.assign({}, transaction));
@@ -338,6 +344,17 @@ class Serializer {
             const refference = singular ? ref : ref + "/" + key;
             !singular || delete data.key;
             let instance = this.acebase.ref(refference);
+            //! queue only supports coming from server instance at this moment
+            //TODO: use bull and redis
+            //TODO: queue support for lendb-client
+            // if (!server && queue) {
+            //     transaction.eventHandles.queue = false; //do not repeat the queue
+            //     if (!this.Queue[refference])
+            //         this.Queue[refference] = new Queue({ concurrency: 1 });
+            //     //@ts-ignore
+            //     this.Queue[refference].add(this.Save(transaction, server));
+            //     return Promise.resolve({});
+            // }
             const exists = await instance.exists();
             const event = {
                 before: exists ? "beforeUpdate" : "beforeAdd",
@@ -611,8 +628,18 @@ class Serializer {
                 typeof clone["searchString"] == "string") {
                 queryRef.filter(SEARCH_FIELD, "like", "*" + clone["searchString"] + "*");
             }
-            const { skip, limit, page, filters, exclusion, inclusion, sort, searchString } = clone;
-            let transactionCopy = { ref, filters, skip, limit, page, exclusion, inclusion, sort, searchString };
+            const { aggregates, skip, limit, page, filters, exclusion, inclusion, sort, searchString, } = clone;
+            let transactionCopy = {
+                ref,
+                filters,
+                skip,
+                limit,
+                page,
+                exclusion,
+                inclusion,
+                sort,
+                searchString,
+            };
             let count = await queryRef.count();
             if (live && live == true && cuid_1.default.isCuid(subscriptionKey)) {
                 await this.emitter.emit("setLiveQueryRefference", {
@@ -621,9 +648,13 @@ class Serializer {
                 });
             }
             let data = [];
-            if (Array.isArray(exclusion) && exclusion.length || Array.isArray(inclusion) && inclusion.length) {
+            if ((Array.isArray(exclusion) && exclusion.length) ||
+                (Array.isArray(inclusion) && inclusion.length)) {
                 if (exclusion?.length && inclusion?.length) {
-                    data = (await queryRef.get({ exclude: exclusion, include: inclusion })).map((snap) => snap.val());
+                    data = (await queryRef.get({
+                        exclude: exclusion,
+                        include: inclusion,
+                    })).map((snap) => snap.val());
                 }
                 else if (exclusion?.length) {
                     data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
@@ -633,7 +664,185 @@ class Serializer {
                 }
             }
             else {
-                data = (await queryRef.get()).map((snap) => snap.val());
+                if ((0, lodash_1.isObject)(aggregates) && !(0, lodash_1.isDate)(aggregates)) {
+                    queryRef.take(Infinity);
+                    let groups = {};
+                    let countRefs = {};
+                    let sumRefs = {};
+                    let undefinedRefs = {};
+                    //@ts-ignore
+                    const groupKey = aggregates.groupBy;
+                    /**
+                     * TODO: Summarized Aggregate
+                     * Instead of loading everything into memory as array of object,
+                     * Each items from iteration should
+                     * accomulate the value.
+                     */
+                    await queryRef.forEach((snap) => {
+                        if (Object.keys(groups).length == limit) {
+                            return false;
+                        }
+                        let value = snap.val();
+                        let group = value[groupKey];
+                        if (!(group in groups)) {
+                            groups[group] = {};
+                        }
+                    });
+                    let summary = await queryRef
+                        .filter(groupKey, "in", Object.keys(groups))
+                        .forEach((snap) => {
+                        if (Object.keys(groups).length == limit) {
+                            return false;
+                        }
+                        let value = snap.val();
+                        let group = value[groupKey];
+                        //@ts-ignore
+                        for (const aggregation of aggregates.list) {
+                            if (!(aggregation.alias in groups[group])) {
+                                if (aggregation.operation == "MIN") {
+                                    groups[group][aggregation.alias] =
+                                        value[aggregation.field];
+                                }
+                                else if (aggregation.operation == "MAX") {
+                                    groups[group][aggregation.alias] =
+                                        value[aggregation.field];
+                                }
+                                else if (aggregation.operation == "SUM") {
+                                    groups[group][aggregation.alias] =
+                                        value[aggregation.field];
+                                }
+                                else if (aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in
+                                        undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(`${group}.${aggregation.alias}` in
+                                        sumRefs)) {
+                                        sumRefs[`${group}.${aggregation.alias}`] = value[aggregation.field];
+                                    }
+                                    else {
+                                        sumRefs[`${group}.${aggregation.alias}`] += value[aggregation.field];
+                                    }
+                                }
+                                else if (aggregation.operation == "COUNT" ||
+                                    aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in
+                                        undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(group in countRefs)) {
+                                        countRefs[group] = 1;
+                                    }
+                                    else {
+                                        countRefs[group] += 1;
+                                    }
+                                }
+                            }
+                            else {
+                                if (aggregation.operation == "MIN") {
+                                    groups[group][aggregation.alias] =
+                                        groups[group][aggregation.alias] <
+                                            value[aggregation.field]
+                                            ? groups[group][aggregation.alias]
+                                            : value[aggregation.field];
+                                }
+                                else if (aggregation.operation == "MAX") {
+                                    groups[group][aggregation.alias] =
+                                        groups[group][aggregation.alias] >
+                                            value[aggregation.field]
+                                            ? groups[group][aggregation.alias]
+                                            : value[aggregation.field];
+                                }
+                                else if (aggregation.operation == "SUM") {
+                                    groups[group][aggregation.alias] =
+                                        groups[group][aggregation.alias] +
+                                            value[aggregation.field];
+                                }
+                                else if (aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in
+                                        undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(`${group}.${aggregation.alias}` in
+                                        sumRefs)) {
+                                        sumRefs[`${group}.${aggregation.alias}`] = value[aggregation.field];
+                                    }
+                                    else {
+                                        sumRefs[`${group}.${aggregation.alias}`] += value[aggregation.field];
+                                    }
+                                }
+                                else if (aggregation.operation == "COUNT") {
+                                    if (!(`${group}.${aggregation.alias}` in
+                                        undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(group in countRefs)) {
+                                        countRefs[group] = 1;
+                                    }
+                                    else {
+                                        countRefs[group] += 1;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    console.log(sumRefs, "\n");
+                    console.log(countRefs, "\n");
+                    console.log(undefinedRefs, "\n");
+                    for (const undefinedRef of Object.entries(undefinedRefs)) {
+                        let keySplit = undefinedRef[0].split(".");
+                        const group = keySplit[0];
+                        const alias = keySplit[1];
+                        const op = undefinedRef[1];
+                        let count = countRefs[group];
+                        console.log(undefinedRef[0]);
+                        console.log(count);
+                        let avg = sumRefs[undefinedRef[0]] / count;
+                        console.log(avg + "\n");
+                        if (count == undefined) {
+                            //throw error
+                        }
+                        if (typeof avg != "number" || avg == NaN) {
+                            //throw error
+                        }
+                        if (!groups[group])
+                            groups[group] = {};
+                        if (op == "AVG")
+                            groups[group][alias] = avg;
+                        if (op == "COUNT")
+                            groups[group][alias] = count;
+                    }
+                    count = Object.keys(console_1.group).length;
+                    data = Object.entries(groups).map((g) => {
+                        //@ts-ignore
+                        return { [groupKey]: g[0], ...g[1] };
+                    });
+                    //@ts-ignore
+                    // for (const aggregation of aggregates.list) {
+                    //     for (const group of groups) {
+                    //         let toTransform = tempObjects
+                    //             .filter((tObj) => tObj[groupfield] == group)
+                    //             .map((tObj) => tObj[aggregation.field]);
+                    //         if (
+                    //             aggregation.operation != "COUNT" &&
+                    //             toTransform.some((tt) => typeof tt != "number")
+                    //         ) {
+                    //             //throw error
+                    //         }
+                    //         if (aggregation.operation == "MIN") {
+                    //             if (!initialGroupValue[group])
+                    //                 initialGroupValue[group] = {};
+                    //             initialGroupValue[group][aggregation.alias] =
+                    //                 Math.min(...toTransform);
+                    //         }
+                    //         if (aggregation.operation == "MAX") {
+                    //             if (!initialGroupValue[group])
+                    //                 initialGroupValue[group] = {};
+                    //             initialGroupValue[group][aggregation.alias] =
+                    //                 Math.max(...toTransform);
+                    //         }
+                    //     }
+                    // }
+                }
+                else {
+                    data = (await queryRef.get()).map((snap) => snap.val());
+                }
             }
             //! todo return decorated data
             if (executeHook) {

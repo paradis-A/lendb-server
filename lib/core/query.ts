@@ -11,6 +11,7 @@ export default class LenQuery {
     skip: number = 0;
     limit: number = 100;
     page: number = 0;
+    protected aggregates: Aggregate;
     protected operation: string;
     protected exclusion: string[] = [];
     protected inclusion: string[] = [];
@@ -145,7 +146,7 @@ export default class LenQuery {
         this.searchString = word;
         return this;
     }
-    
+
     protected stripNonQuery(clone: this) {
         delete clone.serializer;
         delete clone.emitter;
@@ -162,7 +163,13 @@ export default class LenQuery {
             .join("/");
     }
 
-    async fetch(
+    aggregate(groupBy: string[], cb: (ops: Aggregate) => void | Aggregate) {
+        this.aggregates = new Aggregate(groupBy);
+        cb(this.aggregates);
+        return this;
+    }
+
+    async execute(
         options: { page?: number; limit?: number; hook?: boolean } = {
             hook: false,
         }
@@ -190,68 +197,93 @@ export default class LenQuery {
                     delete clone.searchString;
                 }
             }
-            if(clone.filters && isObject(clone.filters) &&  Object.entries(clone.filters).length){
-                let tempFilters = []
+
+            if (
+                clone.filters &&
+                isObject(clone.filters) &&
+                Object.entries(clone.filters).length
+            ) {
+                let tempFilters = [];
                 for (const entry of Object.entries(clone.filters)) {
-                    let key = entry[0]
-                    let value = entry[1]
-                    if(key.includes("[") || key.includes("]")){
-                        let start = key.indexOf("[")
-                        let end = key.indexOf("]")
-                        if(start == -1 || end == -1){
-                            throw new Error("Filter must be enclosed with []")
+                    let key = entry[0];
+                    let value = entry[1];
+                    if (key.includes("[") || key.includes("]")) {
+                        let start = key.indexOf("[");
+                        let end = key.indexOf("]");
+                        if (start == -1 || end == -1) {
+                            throw new Error("Filter must be enclosed with []");
                         }
-                        let filter = key.substring(start + 1,end)
-                        let field = key.substring(0,start)
-                        if(operatorBasis.includes(filter)){
-                            if(filter=="in" && !Array.isArray(value)) throw new Error("Invalid filter")
-                            if(filter=="between" && !Array.isArray(value)) throw new Error("Invalid filter")
+                        let filter = key.substring(start + 1, end);
+                        let field = key.substring(0, start);
+                        if (operatorBasis.includes(filter)) {
+                            if (filter == "in" && !Array.isArray(value))
+                                throw new Error("Invalid filter");
+                            if (filter == "between" && !Array.isArray(value))
+                                throw new Error("Invalid filter");
                             const alphaOperators = {
                                 eq: "==",
                                 neq: "!=",
                                 gt: ">",
                                 gte: ">=",
                                 lt: "<",
-                                lte: "<="
+                                lte: "<=",
+                            };
+                            if (filter.startsWith("not")) {
+                                let transformedFilter = Object.keys(
+                                    alphaOperators
+                                ).includes(filter.substring(2).toLowerCase())
+                                    ? alphaOperators[
+                                          filter.substring(2).toLowerCase()
+                                      ]
+                                    : filter.substring(2).toLowerCase();
+                                tempFilters.push([
+                                    field,
+                                    transformedFilter,
+                                    value,
+                                ]);
+                            } else {
+                                tempFilters.push([field, filter, value]);
                             }
-                            if(filter.startsWith("not")){
-                                let transformedFilter = Object.keys(alphaOperators).includes(filter.substring(2).toLowerCase()) ? 
-                                alphaOperators[filter.substring(2).toLowerCase()] : filter.substring(2).toLowerCase()
-                                tempFilters.push([field,transformedFilter,value])
-                            }else{
-                                tempFilters.push([field,filter,value])
-                            }
-                        }else{
-                            throw new Error("Invalid filter")
+                        } else {
+                            throw new Error("Invalid filter");
                         }
-                    }else{
-                        if(Array.isArray(value)){
-                            tempFilters.push([key,"in",value])
-                        }else{
-                            tempFilters.push([key,"==",value])
+                    } else {
+                        if (Array.isArray(value)) {
+                            tempFilters.push([key, "in", value]);
+                        } else {
+                            tempFilters.push([key, "==", value]);
                         }
                     }
                 }
                 //@ts-ignore
-                clone.filters = tempFilters
-            } else{
+                clone.filters = tempFilters;
+            } else {
                 //@ts-ignore
-                clone.filters = []
+                clone.filters = [];
             }
-            if(clone.sorts && isObject(clone.sorts) && Object.entries(clone.sorts).length){
-                let tempSorts = []
+            if (clone.aggregates && clone?.aggregates.list.length) {
+                const { groupBy, list } = clone.aggregates;
+                //@ts-ignore
+                clone.aggregates = { groupBy, list };
+            }
+            if (
+                clone.sorts &&
+                isObject(clone.sorts) &&
+                Object.entries(clone.sorts).length
+            ) {
+                let tempSorts = [];
                 for (const entry of Object.entries(clone.sorts)) {
-                    let key = entry[0]
-                    let value = entry[1]
-                    if(value == "ASC"){
-                        tempSorts.push([key,true])
-                    }else if(value== "DESC"){
-                        tempSorts.push([key,false])
+                    let key = entry[0];
+                    let value = entry[1];
+                    if (value == "ASC") {
+                        tempSorts.push([key, true]);
+                    } else if (value == "DESC") {
+                        tempSorts.push([key, false]);
                     }
                 }
                 //@ts-ignore
-                clone.sorts = tempSorts
-                console.log(tempSorts)
+                clone.sorts = tempSorts;
+                console.log(tempSorts);
             }
             if (page && typeof page == "number") clone.page = page;
             if (limit && typeof limit == "number") clone.limit = limit;
@@ -273,12 +305,48 @@ export default class LenQuery {
     }
 }
 
+class Aggregate {
+    list: {
+        field: string;
+        operation: "SUM" | "COUNT" | "MIN" | "MAX" | "AVG";
+        alias: string;
+    }[] = [];
+    groupBy: string[] = [];
+    constructor(groupBy: string[]) {
+        this.groupBy = groupBy;
+    }
+
+    sum(field: string,alias: string) {
+        this.list.push({ field, operation: "SUM", alias});
+        return this;
+    }
+
+    count(field: string,alias: string) {
+        this.list.push({ field, operation: "COUNT",alias });
+        return this;
+    }
+
+    min(field: string,alias: string) {
+        this.list.push({ field, operation: "MIN",alias });
+        return this;
+    }
+
+    max(field: string,alias: string) {
+        this.list.push({ field, operation: "MAX",alias });
+        return this;
+    }
+    
+    avg(field: string,alias: string) {
+        this.list.push({ field, operation: "AVG",alias });
+        return this;
+    }
+}
+
 class iLiveQuery {
     callbacks: Function[] = [];
     protected add: Function = null;
     protected update: Function = null;
     protected destroy: Function = null;
-
     onAdd(cb: (e: any) => void) {
         this.add = cb;
     }
@@ -330,5 +398,5 @@ const operatorBasis = [
     ">=",
     "<=",
     ">",
-    "<"
-]
+    "<",
+];
