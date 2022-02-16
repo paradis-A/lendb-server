@@ -9,6 +9,7 @@ const acebase_1 = require("acebase");
 const core_1 = require("./core");
 // import Figlet from "figlet";
 const emittery_1 = __importDefault(require("emittery"));
+//@ts-ignore
 const live_directory_1 = __importDefault(require("live-directory"));
 const graceful_fs_1 = __importDefault(require("graceful-fs"));
 const cuid_1 = __importDefault(require("cuid"));

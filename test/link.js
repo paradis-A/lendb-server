@@ -1,6 +1,7 @@
 var assert = require("assert");
 const { LenDB } = require("../dist");
 const db = new LenDB("linktest", { logLevel: "error" });
+require("./populate")
 describe("link", async function () {
     describe(`Join the fields by using ObjectLink`, function () {
         it("Should match source field value of target", async () => {

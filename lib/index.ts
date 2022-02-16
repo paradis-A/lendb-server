@@ -12,6 +12,7 @@ import {
 export type { LenObject, LenQuery } from "./core";
 // import Figlet from "figlet";
 import Emittery from "emittery";
+//@ts-ignore
 import LiveDirectory from "live-directory";
 import fs from "graceful-fs";
 import cuid from "cuid";

@@ -820,26 +820,30 @@ export default class Serializer {
                     let undefinedRefs: {
                         [path: string]: string;
                     } = {};
-
                     //@ts-ignore
                     const groupKey = aggregates.groupBy;
-                    /**
-                     * TODO: Summarized Aggregate
-                     * Instead of loading everything into memory as array of object,
-                     * Each items from iteration should
-                     * accomulate the value.
-                     */
+                    //unwind group keys
+                    const searchAndGroup = async (groupRes: string[])=>{
+                        let tempGroups = []
+                        let groupQuery = this.applyFilters(clone,this.acebase.query(ref))
+                        if(groupRes.length){
+                            groupQuery.filter(groupKey,"!in",groupRes)
+                        }
+                        await groupQuery.forEach((snap) => {
+                            if (Object.keys(tempGroups).length == limit) {
+                                return false;
+                            }
+                            let value = snap.val();
+                            let group = value[groupKey];
+                            if (!(group in tempGroups)) {
+                                tempGroups.push(group)
+                                return false
+                            }
+                        });
+                        return tempGroups
+                    }
 
-                    await queryRef.forEach((snap) => {
-                        if (Object.keys(groups).length == limit) {
-                            return false;
-                        }
-                        let value = snap.val();
-                        let group = value[groupKey];
-                        if (!(group in groups)) {
-                            groups[group] = {};
-                        }
-                    });
+                    
 
                     let summary = await queryRef
                         .filter(groupKey, "in", Object.keys(groups))
@@ -971,9 +975,6 @@ export default class Serializer {
                             }
                         });
 
-                    console.log(sumRefs, "\n");
-                    console.log(countRefs, "\n");
-                    console.log(undefinedRefs, "\n");
                     for (const undefinedRef of Object.entries(undefinedRefs)) {
                         let keySplit = undefinedRef[0].split(".");
                         const group = keySplit[0];
@@ -1002,32 +1003,6 @@ export default class Serializer {
                         return { [groupKey]: g[0], ...g[1] };
                     });
 
-                    //@ts-ignore
-                    // for (const aggregation of aggregates.list) {
-                    //     for (const group of groups) {
-                    //         let toTransform = tempObjects
-                    //             .filter((tObj) => tObj[groupfield] == group)
-                    //             .map((tObj) => tObj[aggregation.field]);
-                    //         if (
-                    //             aggregation.operation != "COUNT" &&
-                    //             toTransform.some((tt) => typeof tt != "number")
-                    //         ) {
-                    //             //throw error
-                    //         }
-                    //         if (aggregation.operation == "MIN") {
-                    //             if (!initialGroupValue[group])
-                    //                 initialGroupValue[group] = {};
-                    //             initialGroupValue[group][aggregation.alias] =
-                    //                 Math.min(...toTransform);
-                    //         }
-                    //         if (aggregation.operation == "MAX") {
-                    //             if (!initialGroupValue[group])
-                    //                 initialGroupValue[group] = {};
-                    //             initialGroupValue[group][aggregation.alias] =
-                    //                 Math.max(...toTransform);
-                    //         }
-                    //     }
-                    // }
                 } else {
                     data = (await queryRef.get()).map((snap) => snap.val());
                 }
@@ -1127,7 +1102,7 @@ export default class Serializer {
                 else queryRef.sort(s[0]);
             });
         }
-        queryRef.take(payload?.take || 100);
+        queryRef.take(payload?.limit || 100);
         queryRef.skip(payload?.skip || 0);
         if (payload?.page && payload?.page > 1) {
             if (payload?.take)
