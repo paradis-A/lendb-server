@@ -15,7 +15,6 @@ async function populate(){
 	}
 	await Promise.all(promises)
 	console.log("Pets count",await db.acebase.ref("pets").count())
-	db.acebase.close()
 	Promise.resolve(true)
 }
 

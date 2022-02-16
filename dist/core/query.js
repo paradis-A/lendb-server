@@ -150,7 +150,6 @@ class LenQuery {
             let clone = this.stripNonQuery((0, lodash_1.cloneDeep)(this));
             //clear white spaces ons earch string
             if (clone.searchString) {
-                console.log(clone.searchString);
                 let noWhiteSpace = clone.searchString.split(" ");
                 if (noWhiteSpace.every((v) => v == "")) {
                     delete clone.searchString;

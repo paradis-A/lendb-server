@@ -188,7 +188,6 @@ export default class LenQuery {
             let clone = this.stripNonQuery(cloneDeep(this));
             //clear white spaces ons earch string
             if (clone.searchString) {
-                console.log(clone.searchString);
                 let noWhiteSpace = clone.searchString.split(" ");
                 if (noWhiteSpace.every((v) => v == "")) {
                     delete clone.searchString;

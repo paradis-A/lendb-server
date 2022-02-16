@@ -487,7 +487,6 @@ export default class Serializer {
             await this.autoIndex(hookRef, data);
             delete data[searchField];
             let returnData = (await instance.get()).val();
-            instance.off();
             if (executeHook) {
                 await this.ExecuteHook(
                     event.after,
@@ -498,6 +497,7 @@ export default class Serializer {
                     user
                 );
             }
+            
             //! access level permission when emitting for client side
             if (executeEmit) {
                 if (exists) {
@@ -669,10 +669,13 @@ export default class Serializer {
         }
     }
 
+    searchAndGroup(ref: string, transation: any, groupVar: string[]){
+
+    }
+
     protected async autoIndex(path: string, data: any) {
         try {
             if (isObject(data)) {
-                if (path.includes("/")) {
                     const dataArr = Object.entries(data);
                     for (const arr of dataArr) {
                         const field = arr[0];
@@ -692,12 +695,6 @@ export default class Serializer {
                             this.acebase.indexes.create(path, field);
                         }
                     }
-                } else if (SEARCH_FIELD in data) {
-                    path = this.toWildCardPath(path);
-                    this.acebase.indexes.create(path, SEARCH_FIELD, {
-                        type: "fulltext",
-                    });
-                }
             }
             return Promise.resolve(true);
         } catch (error) {
@@ -782,14 +779,14 @@ export default class Serializer {
                 sort,
                 searchString,
             };
-            let count = await queryRef.count();
+            let count = 0;
             if (live && live == true && cuid.isCuid(subscriptionKey)) {
                 await this.emitter.emit("setLiveQueryRefference", {
                     transaction: transactionCopy,
                     subscriptionKey,
                 });
             }
-
+            
             let data: any[] = [];
             if (
                 (Array.isArray(exclusion) && exclusion.length) ||
@@ -845,6 +842,7 @@ export default class Serializer {
                                     await searchAndGroup(tempGroups)
                                     return false;
                                 }
+                                
                             });
                             searchedGroup = [...tempGroups]
                             return Promise.resolve(true)
@@ -852,13 +850,17 @@ export default class Serializer {
                             throw error;
                         }
                     };
+                    
                     await searchAndGroup(searchedGroup)
                     for (const sg of searchedGroup) {
                         groups[sg] = {}
                     }
-                    let summary = await queryRef
+                    // let i = 0
+                    await queryRef
                         .filter(groupKey, "in", searchedGroup)
                         .forEach((snap) => {
+                            // ++i
+                            // console.log(i)
                             if (Object.keys(groups).length == limit) {
                                 return false;
                             }
@@ -992,10 +994,7 @@ export default class Serializer {
                         const alias = keySplit[1];
                         const op = undefinedRef[1];
                         let count = countRefs[group];
-                        console.log(undefinedRef[0]);
-                        console.log(count);
                         let avg = sumRefs[undefinedRef[0]] / count;
-                        console.log(avg + "\n");
                         if (count == undefined) {
                             //throw error
                         }
@@ -1008,13 +1007,14 @@ export default class Serializer {
                         if (op == "COUNT") groups[group][alias] = count;
                     }
 
-                    count = Object.keys(group).length;
+                    count = 0
                     data = Object.entries(groups).map((g) => {
                         //@ts-ignore
                         return { [groupKey]: g[0], ...g[1] };
                     });
                 } else {
                     data = (await queryRef.get()).map((snap) => snap.val());
+                    count = await queryRef.count();
                 }
             }
             //! todo return decorated data
@@ -1087,6 +1087,7 @@ export default class Serializer {
         } else {
             data = (await eventEmitted.ref.get()).val();
         }
+
         index = (await dataQuery.get({ include: ["key"] }))
             .map(function (v) {
                 return v.val().key;
@@ -1103,9 +1104,10 @@ export default class Serializer {
             payload.filters.forEach((f) => {
                 queryRef.filter(f[0], f[1], f[2]);
             });
-        } else {
-            queryRef.filter("key", "!=", null);
         }
+        // else{
+        //     queryRef.filter("key","!=",null)
+        // }
         if (Array.isArray(payload?.sorts)) {
             payload.sorts.forEach((s) => {
                 if (s.length > 1) queryRef.sort(s[0], s[1]);
@@ -1116,7 +1118,7 @@ export default class Serializer {
         queryRef.skip(payload?.skip || 0);
         if (payload?.page && payload?.page > 1) {
             if (payload?.take)
-                queryRef.skip((payload?.page - 1) * payload?.take);
+                queryRef.skip((payload?.page - 1) * payload?.limit);
             else queryRef.skip((payload?.page - 1) * 100);
         } else {
             queryRef.skip(0);
