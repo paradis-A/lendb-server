@@ -721,7 +721,7 @@ export default class Serializer {
         if (ref.endsWith("/")) ref = ref.substring(0, ref.length - 1);
         return ref;
     }
-    
+
     protected async Query(
         transaction: any,
         server: { req?: Request; res?: Response }
@@ -822,31 +822,42 @@ export default class Serializer {
                     } = {};
                     //@ts-ignore
                     const groupKey = aggregates.groupBy;
+                    let searchedGroup:string[] = []
                     //unwind group keys
-                    const searchAndGroup = async (groupRes: string[])=>{
-                        let tempGroups = []
-                        let groupQuery = this.applyFilters(clone,this.acebase.query(ref))
-                        if(groupRes.length){
-                            groupQuery.filter(groupKey,"!in",groupRes)
+                    const searchAndGroup = async (groupRes: string[]) => {
+                        try {
+                            let tempGroups = groupRes
+                            let groupQuery = this.applyFilters(
+                                clone,
+                                this.acebase.query(ref)
+                            );
+                            if (groupRes.length) {
+                                groupQuery.filter(groupKey, "!in", tempGroups);
+                            }
+                            await groupQuery.forEach(async (snap) => {
+                                if (Object.keys(tempGroups).length == limit) {
+                                    return false;
+                                }
+                                let value = snap.val();
+                                let group = value[groupKey];
+                                if (!(group in tempGroups)) {
+                                    tempGroups.push(group);
+                                    await searchAndGroup(tempGroups)
+                                    return false;
+                                }
+                            });
+                            searchedGroup = [...tempGroups]
+                            return Promise.resolve(true)
+                        } catch (error) {
+                            throw error;
                         }
-                        await groupQuery.forEach((snap) => {
-                            if (Object.keys(tempGroups).length == limit) {
-                                return false;
-                            }
-                            let value = snap.val();
-                            let group = value[groupKey];
-                            if (!(group in tempGroups)) {
-                                tempGroups.push(group)
-                                return false
-                            }
-                        });
-                        return tempGroups
+                    };
+                    await searchAndGroup(searchedGroup)
+                    for (const sg of searchedGroup) {
+                        groups[sg] = {}
                     }
-
-                    
-
                     let summary = await queryRef
-                        .filter(groupKey, "in", Object.keys(groups))
+                        .filter(groupKey, "in", searchedGroup)
                         .forEach((snap) => {
                             if (Object.keys(groups).length == limit) {
                                 return false;
@@ -1002,7 +1013,6 @@ export default class Serializer {
                         //@ts-ignore
                         return { [groupKey]: g[0], ...g[1] };
                     });
-
                 } else {
                     data = (await queryRef.get()).map((snap) => snap.val());
                 }

@@ -672,28 +672,40 @@ class Serializer {
                     let undefinedRefs = {};
                     //@ts-ignore
                     const groupKey = aggregates.groupBy;
+                    let searchedGroup = [];
                     //unwind group keys
                     const searchAndGroup = async (groupRes) => {
-                        let tempGroups = [];
-                        let groupQuery = this.applyFilters(clone, this.acebase.query(ref));
-                        if (groupRes.length) {
-                            groupQuery.filter(groupKey, "!in", groupRes);
+                        try {
+                            let tempGroups = groupRes;
+                            let groupQuery = this.applyFilters(clone, this.acebase.query(ref));
+                            if (groupRes.length) {
+                                groupQuery.filter(groupKey, "!in", tempGroups);
+                            }
+                            await groupQuery.forEach(async (snap) => {
+                                if (Object.keys(tempGroups).length == limit) {
+                                    return false;
+                                }
+                                let value = snap.val();
+                                let group = value[groupKey];
+                                if (!(group in tempGroups)) {
+                                    tempGroups.push(group);
+                                    await searchAndGroup(tempGroups);
+                                    return false;
+                                }
+                            });
+                            searchedGroup = [...tempGroups];
+                            return Promise.resolve(true);
                         }
-                        await groupQuery.forEach((snap) => {
-                            if (Object.keys(tempGroups).length == limit) {
-                                return false;
-                            }
-                            let value = snap.val();
-                            let group = value[groupKey];
-                            if (!(group in tempGroups)) {
-                                tempGroups.push(group);
-                                return false;
-                            }
-                        });
-                        return tempGroups;
+                        catch (error) {
+                            throw error;
+                        }
                     };
+                    await searchAndGroup(searchedGroup);
+                    for (const sg of searchedGroup) {
+                        groups[sg] = {};
+                    }
                     let summary = await queryRef
-                        .filter(groupKey, "in", Object.keys(groups))
+                        .filter(groupKey, "in", searchedGroup)
                         .forEach((snap) => {
                         if (Object.keys(groups).length == limit) {
                             return false;
