@@ -87,7 +87,7 @@ export class LenDB {
     ObjectLink(settings: ObjectLink) {
         this.links.push(settings);
     }
-
+    
     initialize() {
         this.Server.post("/lenDB", async (req, res) => {
             try {

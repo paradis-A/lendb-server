@@ -775,6 +775,7 @@ export default class Serializer {
                 inclusion,
                 sorts,
                 searchString,
+                aggregates
             };
             let count = 0;
             if (live && live == true && cuid.isCuid(subscriptionKey)) {
@@ -1079,32 +1080,15 @@ export default class Serializer {
         eventEmitted: RealtimeQueryEvent
     ) {
         try {
-            let acebase = new AceBase("test")
             let index = -1;
             let count = 0;
             let newData: any[] = [];
             let data: any = {};
-            let dataQuery = this.applyFilters(
-                transaction,
-                acebase.query(transaction.ref)
-            );
-            let countQuery = this.applyFilters(
-                transaction,
-                acebase.query(transaction.ref)
-            );
-            if (transaction?.searchString) {
-                dataQuery.filter(
-                    SEARCH_FIELD,
-                    "like",
-                    `*${transaction.searchString}*`
-                );
-                countQuery.filter(
-                    SEARCH_FIELD,
-                    "like",
-                    `*${transaction.searchString}*`
-                );
-            }
-
+            //@ts-ignore
+            delete transaction.subscriptionKey
+            //@ts-ignore
+            transaction.live = false
+            let res =  await this.Query(transaction,null)
             if (eventEmitted?.snapshot) {
                 if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
                     data = (await eventEmitted.snapshot.ref.get()).val();
@@ -1112,13 +1096,10 @@ export default class Serializer {
             } else {
                 data = (await eventEmitted.ref.get()).val();
             }
-            index = (await dataQuery.get({ include: ["key"] }))
-                .map(function (v) {
-                    return v.val().key;
-                })
+            index = res.data
                 .findIndex((v) => v == data.key);
-            newData = (await dataQuery.get()).map((v) => v.val());
-            count = await countQuery.take(Infinity).count();
+            newData = res.data
+            count = res.count
             return { data, count, index, newData };
         } catch (error) {
             return Promise.reject(error)
