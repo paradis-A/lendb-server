@@ -269,7 +269,6 @@ exports.default = LenQuery;
 class Aggregate {
     constructor(groupBy) {
         this.list = [];
-        this.groupBy = [];
         this.groupBy = groupBy;
     }
     sum(field, alias) {

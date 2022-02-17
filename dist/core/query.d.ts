@@ -44,7 +44,7 @@ export default class LenQuery {
     search(word: string): this;
     protected stripNonQuery(clone: this): this;
     protected toWildCardPath(ref: string): string;
-    aggregate(groupBy: string[], cb: (ops: Aggregate) => void | Aggregate): this;
+    aggregate(groupBy: string, cb: (ops: Aggregate) => void | Aggregate): this;
     execute(options?: {
         page?: number;
         limit?: number;
@@ -60,8 +60,8 @@ declare class Aggregate {
         operation: "SUM" | "COUNT" | "MIN" | "MAX" | "AVG";
         alias: string;
     }[];
-    groupBy: string[];
-    constructor(groupBy: string[]);
+    groupBy: string;
+    constructor(groupBy: string);
     sum(field: string, alias: string): this;
     count(field: string, alias: string): this;
     min(field: string, alias: string): this;

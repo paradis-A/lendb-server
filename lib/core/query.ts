@@ -163,7 +163,7 @@ export default class LenQuery {
             .join("/");
     }
 
-    aggregate(groupBy: string[], cb: (ops: Aggregate) => void | Aggregate) {
+    aggregate(groupBy:string, cb: (ops: Aggregate) => void | Aggregate) {
         this.aggregates = new Aggregate(groupBy);
         cb(this.aggregates);
         return this;
@@ -310,8 +310,8 @@ class Aggregate {
         operation: "SUM" | "COUNT" | "MIN" | "MAX" | "AVG";
         alias: string;
     }[] = [];
-    groupBy: string[] = [];
-    constructor(groupBy: string[]) {
+    groupBy: string;
+    constructor(groupBy: string) {
         this.groupBy = groupBy;
     }
 
