@@ -619,7 +619,7 @@ class Serializer {
                 typeof clone["searchString"] == "string") {
                 queryRef.filter(SEARCH_FIELD, "like", "*" + clone["searchString"] + "*");
             }
-            const { aggregates, skip, limit, page, filters, exclusion, inclusion, sort, searchString, } = clone;
+            const { aggregates, skip, limit, page, filters, exclusion, inclusion, sorts, searchString, } = clone;
             let transactionCopy = {
                 ref,
                 filters,
@@ -628,7 +628,7 @@ class Serializer {
                 page,
                 exclusion,
                 inclusion,
-                sort,
+                sorts,
                 searchString,
             };
             let count = 0;
@@ -858,28 +858,39 @@ class Serializer {
         }
     }
     async LivePayload(transaction, eventEmitted) {
-        let index = -1;
-        let count = 0;
-        let data = {};
-        let dataQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
-        let countQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
-        if (transaction?.searchString) {
-            dataQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
-            countQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
+        try {
+            let index = -1;
+            let count = 0;
+            let newData = [];
+            let data = {};
+            let dataQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
+            let countQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
+            if (transaction?.searchString) {
+                dataQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
+                countQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
+            }
+            if (eventEmitted?.snapshot) {
+                if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
+                    data = (await eventEmitted.snapshot.ref.get()).val();
+                }
+                else
+                    data = eventEmitted.snapshot.val();
+            }
+            else {
+                data = (await eventEmitted.ref.get()).val();
+            }
+            index = (await dataQuery.get({ include: ["key"] }))
+                .map(function (v) {
+                return v.val().key;
+            })
+                .findIndex((v) => v == data.key);
+            newData = (await dataQuery.get()).map((v) => v.val());
+            count = await countQuery.take(Infinity).count();
+            return { data, count, index, newData };
         }
-        if (eventEmitted?.snapshot) {
-            data = eventEmitted.snapshot.val();
+        catch (error) {
+            return Promise.reject(error);
         }
-        else {
-            data = (await eventEmitted.ref.get()).val();
-        }
-        index = (await dataQuery.get({ include: ["key"] }))
-            .map(function (v) {
-            return v.val().key;
-        })
-            .findIndex((v) => v == data.key);
-        count = await countQuery.take(1000000000000).count();
-        return { data, count, index };
     }
     applyFilters(payload, queryRef) {
         //! Must intercept the filters when they query keys that dont belong to them

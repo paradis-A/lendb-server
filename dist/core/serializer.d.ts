@@ -69,6 +69,7 @@ export default class Serializer {
         data: any;
         count: number;
         index: number;
+        newData: any[];
     }>;
     applyFilters(payload: any, queryRef: DataReferenceQuery): DataReferenceQuery;
 }

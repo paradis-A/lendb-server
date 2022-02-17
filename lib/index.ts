@@ -150,14 +150,14 @@ export class LenDB {
                             liveQueryRefference != undefined
                         )
                             transaction = liveQueryRefference.transaction;
+                            console.log(transaction)
                         queryRef = this.Serializer.applyFilters(
                             transaction,
                             this.acebase.query(transaction.ref)
                         );
                         if (cuid.isCuid(subscriptionKey) && transaction) {
                             queryRef.on("add", async (realtimeQueryEvent) => {
-                                console.log("add event emitted!!!");
-                                const { data, index, count } =
+                                const { data, index, count, newData } =
                                     await this.Serializer.LivePayload(
                                         transaction,
                                         realtimeQueryEvent
@@ -168,13 +168,14 @@ export class LenDB {
                                         data,
                                         index,
                                         count,
+                                        newData
                                     })
                                 );
                             });
                             queryRef.on(
                                 "change",
                                 async (realtimeQueryEvent) => {
-                                    const { data, index, count } =
+                                    const { data, index, count, newData } =
                                         await this.Serializer.LivePayload(
                                             transaction,
                                             realtimeQueryEvent
@@ -185,6 +186,7 @@ export class LenDB {
                                             data,
                                             index,
                                             count,
+                                            newData
                                         })
                                     );
                                 }
@@ -192,14 +194,11 @@ export class LenDB {
                             queryRef.on(
                                 "remove",
                                 async (realtimeQueryEvent) => {
-                                    const { data, index, count } =
+                                    const { data, index, count, newData } =
                                         await this.Serializer.LivePayload(
                                             transaction,
                                             realtimeQueryEvent
                                         );
-                                    const newData = (await queryRef.get()).map(
-                                        (v) => v.val()
-                                    );
                                     ws.send(
                                         JSON.stringify({
                                             type: "destroy",
@@ -356,66 +355,6 @@ export class LenDB {
             await this.Serializer.Upload(req, res, this._uploadPath);
         });
 
-        this.Server.ws("/lenDB_live", (ws) => {
-            let unsubscriber: Function = null;
-            ws.on("message", (data) => {
-                // if (unsubscriber) {
-                //     unsubscriber();
-                // }
-                unsubscriber = null;
-                const query = JSON.parse(data);
-                if (
-                    !("filters" in query) ||
-                    !("sorts" in query) ||
-                    !("ref" in query) ||
-                    !("page" in query) ||
-                    !("limit" in query) ||
-                    !("skip" in query)
-                ) {
-                    ws.close(500, JSON.stringify({ error: "Invalid Data" }));
-                }
-                let queryRef = this.acebase.query(query.ref);
-                this.Serializer.applyFilters(query, queryRef);
-                queryRef
-                    .on("add", (snap) => {
-                        const res = { type: "add", data: snap.snapshot.val() };
-                        ws.send(JSON.stringify(res));
-                    })
-                    .on("change", (snap) => {
-                        const res = {
-                            type: "update",
-                            data: snap.snapshot.val(),
-                        };
-                        ws.send(JSON.stringify(res));
-                    })
-                    .on("remove", (snap) => {
-                        const res = {
-                            type: "destroy",
-                            data: snap.snapshot.val(),
-                        };
-                        ws.send(JSON.stringify(res));
-                    })
-                    .get()
-                    .then((snap) => {
-                        const res = {
-                            type: "initial",
-                            data: snap.map((s) => s.val()),
-                        };
-                        ws.send(JSON.stringify(res));
-                    });
-                unsubscriber = () => {
-                    queryRef.off("add");
-                    queryRef.off("changed");
-                    queryRef.off("remove");
-                };
-            });
-            ws.on("close", (code) => {
-                console.log("a connection has been closed");
-                if (code == 1000 && unsubscriber) {
-                    unsubscriber();
-                }
-            });
-        });
     }
 
     async start(port = 5757, host = "localhost") {

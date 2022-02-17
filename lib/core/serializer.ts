@@ -764,7 +764,7 @@ export default class Serializer {
                 filters,
                 exclusion,
                 inclusion,
-                sort,
+                sorts,
                 searchString,
             } = clone;
             let transactionCopy = {
@@ -775,7 +775,7 @@ export default class Serializer {
                 page,
                 exclusion,
                 inclusion,
-                sort,
+                sorts,
                 searchString,
             };
             let count = 0;
@@ -1082,43 +1082,50 @@ export default class Serializer {
         },
         eventEmitted: RealtimeQueryEvent
     ) {
-        let index = -1;
-        let count = 0;
-        let data: any = {};
-        let dataQuery = this.applyFilters(
-            transaction,
-            this.acebase.query(transaction.ref)
-        );
-        let countQuery = this.applyFilters(
-            transaction,
-            this.acebase.query(transaction.ref)
-        );
-        if (transaction?.searchString) {
-            dataQuery.filter(
-                SEARCH_FIELD,
-                "like",
-                `*${transaction.searchString}*`
+        try {
+            let index = -1;
+            let count = 0;
+            let newData: any[] = [];
+            let data: any = {};
+            let dataQuery = this.applyFilters(
+                transaction,
+                this.acebase.query(transaction.ref)
             );
-            countQuery.filter(
-                SEARCH_FIELD,
-                "like",
-                `*${transaction.searchString}*`
+            let countQuery = this.applyFilters(
+                transaction,
+                this.acebase.query(transaction.ref)
             );
-        }
+            if (transaction?.searchString) {
+                dataQuery.filter(
+                    SEARCH_FIELD,
+                    "like",
+                    `*${transaction.searchString}*`
+                );
+                countQuery.filter(
+                    SEARCH_FIELD,
+                    "like",
+                    `*${transaction.searchString}*`
+                );
+            }
 
-        if (eventEmitted?.snapshot) {
-            data = eventEmitted.snapshot.val();
-        } else {
-            data = (await eventEmitted.ref.get()).val();
+            if (eventEmitted?.snapshot) {
+                if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
+                    data = (await eventEmitted.snapshot.ref.get()).val();
+                } else data = eventEmitted.snapshot.val();
+            } else {
+                data = (await eventEmitted.ref.get()).val();
+            }
+            index = (await dataQuery.get({ include: ["key"] }))
+                .map(function (v) {
+                    return v.val().key;
+                })
+                .findIndex((v) => v == data.key);
+            newData = (await dataQuery.get()).map((v) => v.val());
+            count = await countQuery.take(Infinity).count();
+            return { data, count, index, newData };
+        } catch (error) {
+            return Promise.reject(error)
         }
-
-        index = (await dataQuery.get({ include: ["key"] }))
-            .map(function (v) {
-                return v.val().key;
-            })
-            .findIndex((v) => v == data.key);
-        count = await countQuery.take(1000000000000).count();
-        return { data, count, index };
     }
 
     applyFilters(payload: any, queryRef: DataReferenceQuery) {
