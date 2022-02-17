@@ -124,8 +124,9 @@ export class LenDB {
                     ref: string;
                     searchString: string;
                 };
-                let queryRef: DataReferenceQuery;
+                
                 ws.on("message", async (payloadData) => {
+                    let queryRef: DataReferenceQuery;
                     const payload = JSON.parse(payloadData);
                     //! todo synchronize in short time period
                     if (cuid.isCuid(payload?.subscriptionKey)) {
@@ -150,8 +151,7 @@ export class LenDB {
                             liveQueryRefference != undefined
                         )
                             transaction = liveQueryRefference.transaction;
-                            console.log(transaction)
-                        queryRef = this.Serializer.applyFilters(
+                            queryRef = this.Serializer.applyFilters(
                             transaction,
                             this.acebase.query(transaction.ref)
                         );
@@ -216,19 +216,20 @@ export class LenDB {
 
                     if (payload?.ping) {
                     }
+                    ws.on("close", (code) => {
+                        if(queryRef){
+                            queryRef.off()
+                        }
+                        console.log("test 155555")
+                        if (code == 1000 && subscriptionKey) {
+                            ws.close();
+                            if (queryRef) {
+                                queryRef.off();
+                            }
+                        }
+                    });
                 });
                 //! todo close the connection when it does not ping for certain time
-                ws.on("close", (code) => {
-                    if (code == 1000 && subscriptionKey) {
-                        ws.off("add:" + subscriptionKey, () => {});
-                        ws.off("update:" + subscriptionKey, () => {});
-                        ws.off("destroy:" + subscriptionKey, () => {});
-                        ws.close();
-                        if (queryRef) {
-                            queryRef.off();
-                        }
-                    }
-                });
             } catch (error) {
                 console.log(error);
             }

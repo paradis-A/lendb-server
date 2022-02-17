@@ -21,8 +21,6 @@ import Auth, { Account } from "./auth";
 import type { ObjectLink } from "./";
 // import Queue from "p-queue";
 import { RealtimeQueryEvent } from "acebase-core/types/data-reference";
-import { type } from "os";
-import { group } from "console";
 const SEARCH_FIELD = "__search_field__";
 export default class Serializer {
     protected acebase: AceBase;
@@ -985,7 +983,6 @@ export default class Serializer {
                                 }
                             }
                         });
-
                     for (const undefinedRef of Object.entries(undefinedRefs)) {
                         let keySplit = undefinedRef[0].split(".");
                         const group = keySplit[0];
@@ -1037,7 +1034,6 @@ export default class Serializer {
                         );
                     }
                 }
-
                 data = (await queryRef.get()).map((snap) => snap.val());
                 count = await queryRef.count();
             }
@@ -1083,17 +1079,18 @@ export default class Serializer {
         eventEmitted: RealtimeQueryEvent
     ) {
         try {
+            let acebase = new AceBase("test")
             let index = -1;
             let count = 0;
             let newData: any[] = [];
             let data: any = {};
             let dataQuery = this.applyFilters(
                 transaction,
-                this.acebase.query(transaction.ref)
+                acebase.query(transaction.ref)
             );
             let countQuery = this.applyFilters(
                 transaction,
-                this.acebase.query(transaction.ref)
+                acebase.query(transaction.ref)
             );
             if (transaction?.searchString) {
                 dataQuery.filter(

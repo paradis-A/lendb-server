@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
+const acebase_1 = require("acebase");
 const lodash_1 = require("lodash");
 const SEARCH_FIELD = "__search_field__";
 class Serializer {
@@ -859,12 +860,13 @@ class Serializer {
     }
     async LivePayload(transaction, eventEmitted) {
         try {
+            let acebase = new acebase_1.AceBase("test");
             let index = -1;
             let count = 0;
             let newData = [];
             let data = {};
-            let dataQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
-            let countQuery = this.applyFilters(transaction, this.acebase.query(transaction.ref));
+            let dataQuery = this.applyFilters(transaction, acebase.query(transaction.ref));
+            let countQuery = this.applyFilters(transaction, acebase.query(transaction.ref));
             if (transaction?.searchString) {
                 dataQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);
                 countQuery.filter(SEARCH_FIELD, "like", `*${transaction.searchString}*`);

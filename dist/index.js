@@ -76,8 +76,8 @@ class LenDB {
             try {
                 let subscriptionKey = null;
                 let transaction;
-                let queryRef;
                 ws.on("message", async (payloadData) => {
+                    let queryRef;
                     const payload = JSON.parse(payloadData);
                     //! todo synchronize in short time period
                     if (cuid_1.default.isCuid(payload?.subscriptionKey)) {
@@ -92,7 +92,6 @@ class LenDB {
                         if (liveQueryRefference != null ||
                             liveQueryRefference != undefined)
                             transaction = liveQueryRefference.transaction;
-                        console.log(transaction);
                         queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
                         if (cuid_1.default.isCuid(subscriptionKey) && transaction) {
                             queryRef.on("add", async (realtimeQueryEvent) => {
@@ -130,19 +129,20 @@ class LenDB {
                     }
                     if (payload?.ping) {
                     }
-                });
-                //! todo close the connection when it does not ping for certain time
-                ws.on("close", (code) => {
-                    if (code == 1000 && subscriptionKey) {
-                        ws.off("add:" + subscriptionKey, () => { });
-                        ws.off("update:" + subscriptionKey, () => { });
-                        ws.off("destroy:" + subscriptionKey, () => { });
-                        ws.close();
+                    ws.on("close", (code) => {
                         if (queryRef) {
                             queryRef.off();
                         }
-                    }
+                        console.log("test 155555");
+                        if (code == 1000 && subscriptionKey) {
+                            ws.close();
+                            if (queryRef) {
+                                queryRef.off();
+                            }
+                        }
+                    });
                 });
+                //! todo close the connection when it does not ping for certain time
             }
             catch (error) {
                 console.log(error);
