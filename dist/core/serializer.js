@@ -389,7 +389,7 @@ class Serializer {
                 instance.update(data);
             else
                 instance.set(data);
-            await this.autoIndex(hookRef, data);
+            // await this.autoIndex(hookRef, data);
             delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
@@ -550,8 +550,7 @@ class Serializer {
             return Promise.reject(error);
         }
     }
-    searchAndGroup(ref, transation, groupVar) {
-    }
+    searchAndGroup(ref, transation, groupVar) { }
     async autoIndex(path, data) {
         try {
             if ((0, lodash_1.isObject)(data)) {
@@ -640,68 +639,65 @@ class Serializer {
                 });
             }
             let data = [];
-            if ((Array.isArray(exclusion) && exclusion.length) ||
-                (Array.isArray(inclusion) && inclusion.length)) {
-                if (exclusion?.length && inclusion?.length) {
-                    data = (await queryRef.get({
-                        exclude: exclusion,
-                        include: inclusion,
-                    })).map((snap) => snap.val());
-                }
-                else if (exclusion?.length) {
-                    data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
-                }
-                else if (inclusion?.length) {
-                    data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
-                }
-            }
-            else {
-                if ((0, lodash_1.isObject)(aggregates) && !(0, lodash_1.isDate)(aggregates)) {
-                    queryRef.take(Infinity);
-                    let groups = {};
-                    let countRefs = {};
-                    let sumRefs = {};
-                    let undefinedRefs = {};
-                    //@ts-ignore
-                    const groupKey = aggregates.groupBy;
-                    let searchedGroup = [];
-                    //unwind group keys
-                    const searchAndGroup = async (groupRes) => {
-                        try {
-                            let tempGroups = groupRes;
-                            let groupQuery = this.applyFilters(clone, this.acebase.query(ref));
-                            if (groupRes.length) {
-                                groupQuery.filter(groupKey, "!in", tempGroups);
-                            }
-                            await groupQuery.forEach(async (snap) => {
-                                if (Object.keys(tempGroups).length == limit) {
-                                    return false;
-                                }
-                                let value = snap.val();
-                                let group = value[groupKey];
-                                if (!(group in tempGroups)) {
-                                    tempGroups.push(group);
-                                    await searchAndGroup(tempGroups);
-                                    return false;
-                                }
-                            });
-                            searchedGroup = [...tempGroups];
-                            return Promise.resolve(true);
-                        }
-                        catch (error) {
-                            throw error;
-                        }
-                    };
-                    await searchAndGroup(searchedGroup);
-                    for (const sg of searchedGroup) {
-                        groups[sg] = {};
+            if ((0, lodash_1.isObject)(aggregates) && !(0, lodash_1.isDate)(aggregates)) {
+                queryRef.take(Infinity);
+                let groups = {};
+                let countRefs = {};
+                let sumRefs = {};
+                let undefinedRefs = {};
+                //@ts-ignore
+                let inclusions = [aggregates.groupBy];
+                //@ts-ignore
+                for (const aggregation of aggregates.list) {
+                    if (!inclusions.includes(aggregation.field) &&
+                        aggregation.type != "COUNT") {
+                        inclusions.push(aggregation.field);
                     }
-                    // let i = 0
+                }
+                //@ts-ignore
+                const groupKey = aggregates.groupBy;
+                let searchedGroup = [];
+                //unwind group keys
+                const searchAndGroup = async (groupRes) => {
+                    try {
+                        let tempGroups = groupRes;
+                        let groupQuery = this.applyFilters(clone, this.acebase.query(ref));
+                        if (tempGroups.length) {
+                            groupQuery.filter(groupKey, "!in", tempGroups);
+                        }
+                        groupQuery.take(Infinity);
+                        await groupQuery.forEach({ include: inclusions }, async (snap) => {
+                            if (Object.keys(tempGroups).length == limit) {
+                                return false;
+                            }
+                            let value = snap.val();
+                            let group = value != undefined ? value[groupKey] : null;
+                            if (group != undefined &&
+                                !tempGroups.includes(group)) {
+                                tempGroups.push(group);
+                                await searchAndGroup(tempGroups);
+                                return false;
+                            }
+                        });
+                        searchedGroup = [...tempGroups];
+                        return Promise.resolve(false);
+                    }
+                    catch (error) {
+                        throw error;
+                    }
+                };
+                await searchAndGroup(searchedGroup);
+                for (const sg of searchedGroup) {
+                    groups[sg] = {};
+                }
+                if (!searchedGroup.length) {
+                    data = [];
+                    count = 0;
+                }
+                else {
                     await queryRef
-                        .filter(groupKey, "in", searchedGroup)
-                        .forEach((snap) => {
-                        // ++i
-                        // console.log(i)
+                        .filter("type", "in", searchedGroup)
+                        .forEach({ include: inclusions }, (snap) => {
                         if (Object.keys(groups).length == limit) {
                             return false;
                         }
@@ -813,16 +809,34 @@ class Serializer {
                         if (op == "COUNT")
                             groups[group][alias] = count;
                     }
-                    count = 0;
+                    count = Object.entries(groups).length;
                     data = Object.entries(groups).map((g) => {
                         //@ts-ignore
                         return { [groupKey]: g[0], ...g[1] };
                     });
                 }
-                else {
-                    data = (await queryRef.get()).map((snap) => snap.val());
-                    count = await queryRef.count();
+                //!dummy for tests
+                // data = [{ a: 1 }, { a: 1 }];
+                // count = 2;
+            }
+            else {
+                if ((Array.isArray(exclusion) && exclusion.length) ||
+                    (Array.isArray(inclusion) && inclusion.length)) {
+                    if (exclusion?.length && inclusion?.length) {
+                        data = (await queryRef.get({
+                            exclude: exclusion,
+                            include: inclusion,
+                        })).map((snap) => snap.val());
+                    }
+                    else if (exclusion?.length) {
+                        data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
+                    }
+                    else if (inclusion?.length) {
+                        data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
+                    }
                 }
+                data = (await queryRef.get()).map((snap) => snap.val());
+                count = await queryRef.count();
             }
             //! todo return decorated data
             if (executeHook) {

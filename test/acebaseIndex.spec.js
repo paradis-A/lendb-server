@@ -69,7 +69,6 @@ describe("Indexed instance.ref Foreach performance", function () {
     });
 });
 
-
 describe("Non-Indexed Query Foreach performance", function () {
     this.timeout(Infinity);
     it("",async function () {

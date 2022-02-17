@@ -86,3 +86,5 @@ test/uploads
 test.bat
 
 mock
+
+nodemon.json

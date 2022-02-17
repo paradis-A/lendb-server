@@ -196,7 +196,7 @@ export default class LenQuery {
                     delete clone.searchString;
                 }
             }
-
+            
             if (
                 clone.filters &&
                 isObject(clone.filters) &&
