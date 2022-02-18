@@ -123,6 +123,7 @@ export default class Serializer {
         }
     }
 
+
     protected ExecuteHook(
         event: iAuthEvent | iRefEvent,
         ref: string,
@@ -483,7 +484,17 @@ export default class Serializer {
             await this.ProcessLink(ref, key, data);
             if (exists) instance.update(data);
             else instance.set(data);
-            // await this.autoIndex(hookRef, data);
+            if (!singular) {
+                let indexes = await this.acebase.indexes.get();
+                if (
+                    !indexes.find((i) => {
+                        return i.path == ref && key == "key";
+                    })
+                ) {
+                    this.acebase.indexes.create(ref,"key")
+                }
+            }
+            console.log(await this.acebase.indexes.get());
             delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
@@ -775,7 +786,7 @@ export default class Serializer {
                 inclusion,
                 sorts,
                 searchString,
-                aggregates
+                aggregates,
             };
             let count = 0;
             if (live && live == true && cuid.isCuid(subscriptionKey)) {
@@ -1085,10 +1096,10 @@ export default class Serializer {
             let newData: any[] = [];
             let data: any = {};
             //@ts-ignore
-            delete transaction.subscriptionKey
+            delete transaction.subscriptionKey;
             //@ts-ignore
-            transaction.live = false
-            let res =  await this.Query(transaction,null)
+            transaction.live = false;
+            let res = await this.Query(transaction, null);
             if (eventEmitted?.snapshot) {
                 if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
                     data = (await eventEmitted.snapshot.ref.get()).val();
@@ -1096,13 +1107,12 @@ export default class Serializer {
             } else {
                 data = (await eventEmitted.ref.get()).val();
             }
-            index = res.data
-                .findIndex((v) => v == data.key);
-            newData = res.data
-            count = res.count
+            index = res.data.findIndex((v) => v == data.key);
+            newData = res.data;
+            count = res.count;
             return { data, count, index, newData };
         } catch (error) {
-            return Promise.reject(error)
+            return Promise.reject(error);
         }
     }
 

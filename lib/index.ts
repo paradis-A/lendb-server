@@ -69,7 +69,7 @@ export class LenDB {
             },
         });
     }
-
+    
     Query(ref: string) {
         return new LenQuery(ref, this.emitter, this.Serializer);
     }
@@ -108,10 +108,12 @@ export class LenDB {
             }
         });
 
+        
         this.Server.ws("/lenDB", async (ws) => {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
+                    //TODO: Execute acl here
                     let queryRef: DataReferenceQuery;
                     const payload = JSON.parse(payloadData);
                     let transaction: {
@@ -283,7 +285,10 @@ export class LenDB {
                             }
                             res.removeCookie("lenDB_token");
                             res.json({ message: "Logged out succesfully" });
-                        } else if (payload.type == "authenticate") {
+                        } else if (payload.type == "autenticate_ws"){
+                            
+                        }
+                         else if (payload.type == "authenticate") {
                             let token: any = req.cookies["lenDB_token"];
                             console.log(token);
                             if (token) {
@@ -328,6 +333,10 @@ export class LenDB {
             if (file === undefined) return res.status(404).send();
             return res.type(file.extension).send(file.buffer);
         });
+
+        this.Server.ws("/lenDB_LiveObject", async (ws)=>{
+
+        })
 
         this.Server.get("/lenDB_upload/:key", async (req, res) => {
             res.setHeader("Access-Control-Allow-Origin", "*");

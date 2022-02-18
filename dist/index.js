@@ -76,6 +76,7 @@ class LenDB {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
+                    //TODO: Execute acl here
                     let queryRef;
                     const payload = JSON.parse(payloadData);
                     let transaction;
@@ -228,6 +229,8 @@ class LenDB {
             if (file === undefined)
                 return res.status(404).send();
             return res.type(file.extension).send(file.buffer);
+        });
+        this.Server.ws("/lenDB_LiveObject", async (ws) => {
         });
         this.Server.get("/lenDB_upload/:key", async (req, res) => {
             res.setHeader("Access-Control-Allow-Origin", "*");

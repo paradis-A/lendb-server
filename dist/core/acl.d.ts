@@ -1,13 +1,14 @@
 export interface ACL {
     ref: string;
-    read: ACLPermision;
-    add: ACLPermision;
-    update: ACLPermision;
-    destroy: ACLPermision;
+    role: string;
+    read?: ACLPermision;
+    add?: ACLPermision;
+    update?: ACLPermision;
+    destroy?: ACLPermision;
 }
 export interface ACLPermision {
-    allow: boolean;
-    fields: "*" | string[];
-    level: "own" | "all";
-    ownIdenfier: string;
+    allow?: boolean;
+    fields?: "*" | string[];
+    level?: "own" | "all";
+    ownIdenfier?: string;
 }

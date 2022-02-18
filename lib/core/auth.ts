@@ -46,7 +46,6 @@ export default class Auth {
                     "Error: username/email and password does not match."
                 );
             }
-
             
             let decodedPass = jwt.decode(userinfo.password, userinfo.jwtKey);
 
@@ -81,17 +80,40 @@ export default class Auth {
         }
     }
 
-    async AuthenticateWS() {}
-
-    async Authenticate(token: string) {
-        try {
+    async AuthenticateWS(token:string): Promise<{key:string,token:string}> {
+        try{
             let ref = this.acebase.ref("__tokens__/" + token);
-            console.log("ref exists: ", await ref.exists())
             if (!await ref.exists()) {
                 return Promise.reject("Invalid Token");
             } else {
                 let verifiedToken = (await ref.get()).val();
-                console.log(dayjs(verifiedToken?.expiration).diff()<=0)
+                if (dayjs(verifiedToken?.expiration).diff()<=0) {
+                    return Promise.reject("Token Expired");
+                } else {
+                    let key = "ws" + cuid()
+                    const token = verifiedToken.token
+                    this.acebase.ref("__ws_keys__/" + key).set({
+                        key,token
+                    })
+                    return {token,key}
+                }
+            }
+        }catch (error) {
+            return Promise.reject("Token Expired");
+        }
+    }
+
+    async VerifyWSKey(){
+
+    }
+
+    async Authenticate(token: string) {
+        try {
+            let ref = this.acebase.ref("__tokens__/" + token);
+            if (!await ref.exists()) {
+                return Promise.reject("Invalid Token");
+            } else {
+                let verifiedToken = (await ref.get()).val();
                 if (dayjs(verifiedToken?.expiration).diff()<=0) {
                     return Promise.reject("Token Expiredasdsds");
                 } else {

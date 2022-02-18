@@ -389,7 +389,15 @@ class Serializer {
                 instance.update(data);
             else
                 instance.set(data);
-            // await this.autoIndex(hookRef, data);
+            if (!singular) {
+                let indexes = await this.acebase.indexes.get();
+                if (!indexes.find((i) => {
+                    return i.path == ref && key == "key";
+                })) {
+                    this.acebase.indexes.create(ref, "key");
+                }
+            }
+            console.log(await this.acebase.indexes.get());
             delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
@@ -630,7 +638,7 @@ class Serializer {
                 inclusion,
                 sorts,
                 searchString,
-                aggregates
+                aggregates,
             };
             let count = 0;
             if (live && live == true && cuid_1.default.isCuid(subscriptionKey)) {
@@ -879,8 +887,7 @@ class Serializer {
             else {
                 data = (await eventEmitted.ref.get()).val();
             }
-            index = res.data
-                .findIndex((v) => v == data.key);
+            index = res.data.findIndex((v) => v == data.key);
             newData = res.data;
             count = res.count;
             return { data, count, index, newData };
