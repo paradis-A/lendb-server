@@ -17,8 +17,6 @@ import LiveDirectory from "live-directory";
 import fs from "graceful-fs";
 import cuid from "cuid";
 import { DataReferenceQuery } from "acebase-core";
-import { add, clone, cloneDeep } from "lodash";
-import wait from "wait";
 import pWaitFor from "./extras/pwaitfor";
 export class LenDB {
     protected Serializer: Serializer;
@@ -127,12 +125,10 @@ export class LenDB {
                         ref: string;
                         searchString: string;
                     };
-                    console.log(payload)
                     if (cuid.isCuid(payload?.subscriptionKey)) {
                         subscriptionKey = payload?.subscriptionKey;
                         if (payload?.reconnect == true && payload?.query) {
                             //check acl here
-                            console.log("reconnected")
                             transaction = payload.query;
                             queryRef = this.Serializer.applyFilters(
                                 transaction,

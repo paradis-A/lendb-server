@@ -79,12 +79,10 @@ class LenDB {
                     let queryRef;
                     const payload = JSON.parse(payloadData);
                     let transaction;
-                    console.log(payload);
                     if (cuid_1.default.isCuid(payload?.subscriptionKey)) {
                         subscriptionKey = payload?.subscriptionKey;
                         if (payload?.reconnect == true && payload?.query) {
                             //check acl here
-                            console.log("reconnected");
                             transaction = payload.query;
                             queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
                         }
