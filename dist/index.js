@@ -75,57 +75,61 @@ class LenDB {
         this.Server.ws("/lenDB", async (ws) => {
             try {
                 let subscriptionKey = null;
-                let transaction;
                 ws.on("message", async (payloadData) => {
                     let queryRef;
                     const payload = JSON.parse(payloadData);
-                    //! todo synchronize in short time period
+                    let transaction;
+                    console.log(payload);
                     if (cuid_1.default.isCuid(payload?.subscriptionKey)) {
                         subscriptionKey = payload?.subscriptionKey;
-                        if (queryRef) {
-                            queryRef.off();
+                        if (payload?.reconnect == true && payload?.query) {
+                            //check acl here
+                            console.log("reconnected");
+                            transaction = payload.query;
+                            queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
                         }
-                        await (0, pwaitfor_1.default)(() => {
-                            return (this.liveQueryRefferences.find((lqr) => lqr.subscriptionKey == subscriptionKey) != undefined);
+                        else {
+                            await (0, pwaitfor_1.default)(() => {
+                                return (this.liveQueryRefferences.find((lqr) => lqr.subscriptionKey ==
+                                    subscriptionKey) != undefined);
+                            });
+                            let liveQueryRefference = this.liveQueryRefferences.find((lqr) => lqr.subscriptionKey == subscriptionKey);
+                            if (liveQueryRefference != null ||
+                                liveQueryRefference != undefined)
+                                transaction = liveQueryRefference.transaction;
+                            queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
+                        }
+                        queryRef.on("add", async (realtimeQueryEvent) => {
+                            const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
+                            ws.send(JSON.stringify({
+                                type: "add",
+                                data,
+                                index,
+                                count,
+                                newData,
+                            }));
                         });
-                        let liveQueryRefference = this.liveQueryRefferences.find((lqr) => lqr.subscriptionKey == subscriptionKey);
-                        if (liveQueryRefference != null ||
-                            liveQueryRefference != undefined)
-                            transaction = liveQueryRefference.transaction;
-                        queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
-                        if (cuid_1.default.isCuid(subscriptionKey) && transaction) {
-                            queryRef.on("add", async (realtimeQueryEvent) => {
-                                const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
-                                ws.send(JSON.stringify({
-                                    type: "add",
-                                    data,
-                                    index,
-                                    count,
-                                    newData
-                                }));
-                            });
-                            queryRef.on("change", async (realtimeQueryEvent) => {
-                                const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
-                                ws.send(JSON.stringify({
-                                    type: "update",
-                                    data,
-                                    index,
-                                    count,
-                                    newData
-                                }));
-                            });
-                            queryRef.on("remove", async (realtimeQueryEvent) => {
-                                const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
-                                ws.send(JSON.stringify({
-                                    type: "destroy",
-                                    data,
-                                    index,
-                                    count,
-                                    newData,
-                                }));
-                            });
-                            await queryRef.get({ include: ["key"] });
-                        }
+                        queryRef.on("change", async (realtimeQueryEvent) => {
+                            const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
+                            ws.send(JSON.stringify({
+                                type: "update",
+                                data,
+                                index,
+                                count,
+                                newData,
+                            }));
+                        });
+                        queryRef.on("remove", async (realtimeQueryEvent) => {
+                            const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
+                            ws.send(JSON.stringify({
+                                type: "destroy",
+                                data,
+                                index,
+                                count,
+                                newData,
+                            }));
+                        });
+                        await queryRef.get({ include: ["key"] });
                     }
                     if (payload?.ping) {
                     }
@@ -133,9 +137,8 @@ class LenDB {
                         if (queryRef) {
                             queryRef.off();
                         }
-                        console.log("test 155555");
                         if (code == 1000 && subscriptionKey) {
-                            ws.close();
+                            // ws.close();
                             if (queryRef) {
                                 queryRef.off();
                             }
