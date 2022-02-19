@@ -13,7 +13,11 @@ export default class Auth {
         data: any;
         expiration: number;
     }>;
-    AuthenticateWS(): Promise<void>;
+    AuthenticateWS(token: string): Promise<{
+        key: string;
+        token: string;
+    }>;
+    VerifyWSKey(): Promise<void>;
     Authenticate(token: string): Promise<{
         data: any;
         client_key: string;

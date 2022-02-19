@@ -128,7 +128,7 @@ class LenDB {
                                 newData,
                             }));
                         });
-                        await queryRef.get({ include: ["key"] });
+                        await queryRef.find();
                     }
                     if (payload?.ping) {
                     }
@@ -187,9 +187,18 @@ class LenDB {
                             res.removeCookie("lenDB_token");
                             res.json({ message: "Logged out succesfully" });
                         }
+                        else if (payload.type == "authenticate_ws") {
+                            let token = req.cookies["lenDB_token"];
+                            if (!token) {
+                                res.json({ public: true });
+                            }
+                            else {
+                                let result = await this.auth.AuthenticateWS(token);
+                                res.json({ key: result.key });
+                            }
+                        }
                         else if (payload.type == "authenticate") {
                             let token = req.cookies["lenDB_token"];
-                            console.log(token);
                             if (token) {
                                 let result = await this.auth.Authenticate(token);
                                 res.cookie("lenDB_token", result.token, result.expiration * 3.6e6, {
@@ -216,7 +225,6 @@ class LenDB {
                 }
             }
             catch (error) {
-                console.log("the error is:" + error);
                 res.status(500);
                 res.end(error?.toString());
             }
@@ -259,7 +267,8 @@ class LenDB {
         try {
             this.initialize();
             await this.acebase.ready();
-            this.acebase.indexes.create("__uploads__", "key");
+            await this.acebase.indexes.create("__uploads__", "key");
+            await this.acebase.indexes.create("__tokens__", "key", { type: 'fulltext', config: { maxLength: 100000000 } });
             this.Serializer = new core_1.Serializer(this.acebase, this.emitter, this.hook.refHooks, this.hook.authHooks, null, this.links, this.Server.uws_instance);
             let status = await this.Server.listen(port, host);
             console.log(`Server is running at ${host}:${port}`);

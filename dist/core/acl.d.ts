@@ -1,4 +1,5 @@
 export interface ACL {
+    key?: string;
     ref: string;
     role: string;
     read?: ACLPermision;

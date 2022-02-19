@@ -108,11 +108,11 @@ export class LenDB {
             }
         });
 
-        
         this.Server.ws("/lenDB", async (ws) => {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
+                    
                     //TODO: Execute acl here
                     let queryRef: DataReferenceQuery;
                     const payload = JSON.parse(payloadData);
@@ -209,7 +209,7 @@ export class LenDB {
                                 })
                             );
                         });
-                        await queryRef.get({ include: ["key"] });
+                        await queryRef.find()
                     }
 
                     if (payload?.ping) {
@@ -285,12 +285,17 @@ export class LenDB {
                             }
                             res.removeCookie("lenDB_token");
                             res.json({ message: "Logged out succesfully" });
-                        } else if (payload.type == "autenticate_ws"){
-                            
+                        } else if (payload.type == "authenticate_ws"){
+                            let token: any = req.cookies["lenDB_token"];
+                            if(!token){
+                                res.json({public: true})
+                            }else{
+                                let result = await this.auth.AuthenticateWS(token)
+                                res.json({key: result.key})
+                            }
                         }
                          else if (payload.type == "authenticate") {
                             let token: any = req.cookies["lenDB_token"];
-                            console.log(token);
                             if (token) {
                                 let result = await this.auth.Authenticate(
                                     token
@@ -319,7 +324,6 @@ export class LenDB {
                     res.send("Require valid payload");
                 }
             } catch (error) {
-                console.log("the error is:" + error);
                 res.status(500);
                 res.end(error?.toString());
             }
@@ -335,7 +339,6 @@ export class LenDB {
         });
 
         this.Server.ws("/lenDB_LiveObject", async (ws)=>{
-
         })
 
         this.Server.get("/lenDB_upload/:key", async (req, res) => {
@@ -365,7 +368,8 @@ export class LenDB {
         try {
             this.initialize();
             await this.acebase.ready();
-            this.acebase.indexes.create("__uploads__", "key");
+            await this.acebase.indexes.create("__uploads__", "key");
+            await this.acebase.indexes.create("__tokens__","key",{type: 'fulltext',config: {maxLength: 100000000}})
             this.Serializer = new Serializer(
                 this.acebase,
                 this.emitter,

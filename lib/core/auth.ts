@@ -46,13 +46,12 @@ export default class Auth {
                     "Error: username/email and password does not match."
                 );
             }
-            
-            let decodedPass = jwt.decode(userinfo.password, userinfo.jwtKey);
 
+            let decodedPass = jwt.decode(userinfo.password, userinfo.jwtKey);
             if (decodedPass == password) {
                 const client_key = cuid();
-                const token =
-                    jwt.encode(userinfo.key, cuid()) + "." + client_key;
+                let token = jwt.encode(userinfo.key, cuid());
+                token = token.substring(0, 101) + "." + client_key;
                 const expiration = dayjs(Date.now()).add(
                     this.tokenExpiration / 24,
                     "day"
@@ -80,65 +79,80 @@ export default class Auth {
         }
     }
 
-    async AuthenticateWS(token:string): Promise<{key:string,token:string}> {
-        try{
+    async AuthenticateWS(
+        token: string
+    ): Promise<{ key: string; token: string }> {
+        try {
             let ref = this.acebase.ref("__tokens__/" + token);
-            if (!await ref.exists()) {
+            if (await ref.exists() == false) {
                 return Promise.reject("Invalid Token");
             } else {
                 let verifiedToken = (await ref.get()).val();
-                if (dayjs(verifiedToken?.expiration).diff()<=0) {
+                const now = dayjs(Date.now())
+                const expiration = dayjs(verifiedToken?.expiration)
+                if (dayjs(expiration).diff(now) <= 0) {
+                    console.log(token)
+                    console.log(verifiedToken)
+                    console.log(await ref.exists())
+                    console.log(dayjs(expiration).diff(now),new Date(Date.now()),verifiedToken?.expiration)
+                    console.log(dayjs(expiration).diff(now),new Date(Date.now()),verifiedToken?.expiration)
+                    console.log(dayjs(expiration).diff(now),new Date(Date.now()),verifiedToken?.expiration)
+                    console.log(dayjs(expiration).diff(now),new Date(Date.now()),verifiedToken?.expiration)
+                    console.log(dayjs(expiration).diff(now),new Date(Date.now()),verifiedToken?.expiration)
                     return Promise.reject("Token Expired");
                 } else {
-                    let key = "ws" + cuid()
-                    const token = verifiedToken.token
+                    let key = "ws" + cuid();
                     this.acebase.ref("__ws_keys__/" + key).set({
-                        key,token
-                    })
-                    return {token,key}
+                        key,
+                        token,
+                    });
+                    return { token, key };
                 }
             }
-        }catch (error) {
-            return Promise.reject("Token Expired");
+        } catch (error) {
+            return Promise.reject("Token Expired asdsad");
         }
     }
 
-    async VerifyWSKey(){
-
-    }
+    async VerifyWSKey() {}
 
     async Authenticate(token: string) {
         try {
             let ref = this.acebase.ref("__tokens__/" + token);
-            if (!await ref.exists()) {
+            if (!(await ref.exists())) {
                 return Promise.reject("Invalid Token");
             } else {
                 let verifiedToken = (await ref.get()).val();
-                if (dayjs(verifiedToken?.expiration).diff()<=0) {
-                    return Promise.reject("Token Expiredasdsds");
+                if (dayjs(verifiedToken?.expiration).diff() <= 0) {
+                    return Promise.reject("Token Expired");
                 } else {
                     let userDetails = (
                         await this.acebase
                             .ref("__users__/" + verifiedToken?.userKey)
                             .get()
-                    ).val()
-                    console.log(verifiedToken)
-                    const userKey = userDetails.key
+                    ).val();
+                    const userKey = userDetails.key;
                     await ref.remove();
                     const expiration = dayjs(Date.now()).add(
                         this.tokenExpiration / 24,
                         "day"
                     );
-                    let client_key = token.substring(token.length-25)
-                    let newToken = jwt.encode(cuid(), cuid()) + "." + client_key; //the secret without meaning
+                    let client_key = token.substring(token.length - 25);
+                    let newToken = jwt.encode(cuid(), cuid());
+                    newToken = newToken.substring(0, 101) + "." + client_key; //the secret without meaning
                     //! set client key on token
                     await this.acebase.ref("__tokens__/" + newToken).set({
                         userKey,
                         expiration: new Date(expiration.toISOString()),
                     });
-                    delete userDetails.password
-                    delete userDetails.jwtKey
-                    return Promise.resolve({data: userDetails,client_key,token:newToken,expiration: expiration.get("milliseconds")});
+                    delete userDetails.password;
+                    delete userDetails.jwtKey;
+                    return Promise.resolve({
+                        data: userDetails,
+                        client_key,
+                        token: newToken,
+                        expiration: expiration.get("milliseconds"),
+                    });
                 }
             }
         } catch (error) {
@@ -256,13 +270,12 @@ export default class Auth {
                 "day"
             );
             const client_key = cuid();
-            const token = jwt.encode(cuid(), cuid()) + "." + client_key;
-            await this.acebase
-                .ref("__tokens__/" + token)
-                .set({
-                    userKey: userKey,
-                    expiration: new Date(expiration.toISOString()),
-                });
+            let token = jwt.encode(cuid(), cuid());
+            token = token.substring(0, 101) + "." + client_key;
+            await this.acebase.ref("__tokens__/" + token).set({
+                userKey: userKey,
+                expiration: new Date(expiration.toISOString()),
+            });
             delete credentials.password;
             let data = {
                 ...credentials,
