@@ -22,7 +22,6 @@ export default class Auth {
         data: any;
         client_key: string;
         token: string;
-        expiration: number;
     }>;
     static UserList(): void;
     GetUser(token: string): Promise<Account>;

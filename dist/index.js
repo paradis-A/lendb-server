@@ -166,7 +166,7 @@ class LenDB {
                         if (payload.type == "register") {
                             delete payload.type;
                             let result = await this.auth.Register(payload);
-                            res.cookie("lenDB_token", result.token, result.expiration * 3.6e6, {
+                            res.cookie("lenDB_token", result.token, Infinity, {
                                 httpOnly: true,
                             });
                             const { data, client_key } = result;
@@ -174,7 +174,7 @@ class LenDB {
                         }
                         else if (payload.type == "login") {
                             let result = await this.auth.Login(payload.username, payload.password);
-                            res.cookie("lenDB_token", result.token, result.expiration * 3.6e6, {
+                            res.cookie("lenDB_token", result.token, Infinity, {
                                 httpOnly: true,
                             });
                             const { data, client_key } = result;
@@ -201,7 +201,7 @@ class LenDB {
                             let token = req.cookies["lenDB_token"];
                             if (token) {
                                 let result = await this.auth.Authenticate(token);
-                                res.cookie("lenDB_token", result.token, result.expiration * 3.6e6, {
+                                res.cookie("lenDB_token", result.token, Infinity, {
                                     httpOnly: true,
                                 });
                                 const { client_key, data } = result;

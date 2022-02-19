@@ -25,16 +25,10 @@ class Auth {
         try {
             let userinfo;
             if (this.isValidEmail(usernameOrEmail)) {
-                userinfo = (await this.acebase
-                    .query("__users__")
-                    .filter("email", "==", usernameOrEmail)
-                    .get()).map((v) => v)[0];
+                userinfo = (await this.acebase.query("__users__").filter("email", "==", usernameOrEmail).get()).map((v) => v)[0];
             }
             else {
-                userinfo = (await this.acebase
-                    .query("__users__")
-                    .filter("username", "==", usernameOrEmail)
-                    .get()).map((v) => v.val())[0];
+                userinfo = (await this.acebase.query("__users__").filter("username", "==", usernameOrEmail).get()).map((v) => v.val())[0];
             }
             if (!userinfo?.username) {
                 return Promise.reject("Error: username/email and password does not match.");
@@ -70,7 +64,7 @@ class Auth {
     async AuthenticateWS(token) {
         try {
             let ref = this.acebase.ref("__tokens__/" + token);
-            if (await ref.exists() == false) {
+            if ((await ref.exists()) == false) {
                 return Promise.reject("Invalid Token");
             }
             else {
@@ -78,14 +72,6 @@ class Auth {
                 const now = (0, dayjs_1.default)(Date.now());
                 const expiration = (0, dayjs_1.default)(verifiedToken?.expiration);
                 if ((0, dayjs_1.default)(expiration).diff(now) <= 0) {
-                    console.log(token);
-                    console.log(verifiedToken);
-                    console.log(await ref.exists());
-                    console.log((0, dayjs_1.default)(expiration).diff(now), new Date(Date.now()), verifiedToken?.expiration);
-                    console.log((0, dayjs_1.default)(expiration).diff(now), new Date(Date.now()), verifiedToken?.expiration);
-                    console.log((0, dayjs_1.default)(expiration).diff(now), new Date(Date.now()), verifiedToken?.expiration);
-                    console.log((0, dayjs_1.default)(expiration).diff(now), new Date(Date.now()), verifiedToken?.expiration);
-                    console.log((0, dayjs_1.default)(expiration).diff(now), new Date(Date.now()), verifiedToken?.expiration);
                     return Promise.reject("Token Expired");
                 }
                 else {
@@ -111,33 +97,25 @@ class Auth {
             }
             else {
                 let verifiedToken = (await ref.get()).val();
-                if ((0, dayjs_1.default)(verifiedToken?.expiration).diff() <= 0) {
-                    return Promise.reject("Token Expired");
-                }
-                else {
-                    let userDetails = (await this.acebase
-                        .ref("__users__/" + verifiedToken?.userKey)
-                        .get()).val();
-                    const userKey = userDetails.key;
-                    await ref.remove();
-                    const expiration = (0, dayjs_1.default)(Date.now()).add(this.tokenExpiration / 24, "day");
-                    let client_key = token.substring(token.length - 25);
-                    let newToken = jwt_simple_1.default.encode((0, cuid_1.default)(), (0, cuid_1.default)());
-                    newToken = newToken.substring(0, 101) + "." + client_key; //the secret without meaning
-                    //! set client key on token
-                    await this.acebase.ref("__tokens__/" + newToken).set({
-                        userKey,
-                        expiration: new Date(expiration.toISOString()),
-                    });
-                    delete userDetails.password;
-                    delete userDetails.jwtKey;
-                    return Promise.resolve({
-                        data: userDetails,
-                        client_key,
-                        token: newToken,
-                        expiration: expiration.get("milliseconds"),
-                    });
-                }
+                let userDetails = (await this.acebase.ref("__users__/" + verifiedToken?.userKey).get()).val();
+                // const userKey = userDetails.key;
+                // await ref.remove();
+                // const expiration = dayjs(Date.now()).add(
+                //     this.tokenExpiration / 24,
+                //     "day"
+                // );
+                let client_key = token.substring(token.length - 25);
+                // let newToken = jwt.encode(cuid(), cuid());
+                // newToken = newToken.substring(0, 101) + "." + client_key; //the secret without meaning
+                //! set client key on token
+                delete userDetails.password;
+                delete userDetails.jwtKey;
+                return Promise.resolve({
+                    data: userDetails,
+                    client_key,
+                    token,
+                    // expiration: expiration.get("milliseconds"),
+                });
             }
         }
         catch (error) {
@@ -146,18 +124,13 @@ class Auth {
     }
     static UserList() { }
     async GetUser(token) {
-        let res = (await this.acebase
-            .query("__tokens__")
-            .filter("token", "==", token)
-            .get()).map((snap) => {
+        let res = (await this.acebase.query("__tokens__").filter("token", "==", token).get()).map((snap) => {
             return snap.val();
         });
         if (res.length) {
             let userToken = res[0];
             if (userToken?.userKey) {
-                let userDetails = (await this.acebase
-                    .ref("__users__/" + userToken.userKey)
-                    .get()).val();
+                let userDetails = (await this.acebase.ref("__users__/" + userToken.userKey).get()).val();
                 delete userDetails.password;
                 delete userDetails.jwtKey;
                 return Promise.resolve(userDetails);
@@ -167,10 +140,8 @@ class Auth {
     }
     async Logout(token) {
         try {
-            let key = (await this.acebase
-                .query("__tokens__")
-                .filter("token", "==", token)
-                .get()).map((v) => v.val())[0]?.key;
+            let key = (await this.acebase.query("__tokens__").filter("token", "==", token).get()).map((v) => v.val())[0]
+                ?.key;
             if (key) {
                 await this.acebase.ref("__tokens__/" + key).remove();
             }
@@ -193,8 +164,7 @@ class Auth {
             if (typeof credentials.password != "string") {
                 return Promise.reject("argument password expected to be string");
             }
-            if (typeof credentials.email != "string" ||
-                !this.isValidEmail(credentials.email)) {
+            if (typeof credentials.email != "string" || !this.isValidEmail(credentials.email)) {
                 return Promise.reject("invalid email");
             }
             let jwtKey = (0, cuid_1.default)();
@@ -210,17 +180,11 @@ class Auth {
                 created_at: new Date(Date.now()),
             };
             //check if email exists
-            if (await this.acebase
-                .query("__users__")
-                .filter("username", "==", obj.username)
-                .exists()) {
+            if (await this.acebase.query("__users__").filter("username", "==", obj.username).exists()) {
                 return Promise.reject("Username already exists");
             }
             //check if username exists
-            if (await this.acebase
-                .query("__users__")
-                .filter("email", "==", obj.password)
-                .exists()) {
+            if (await this.acebase.query("__users__").filter("email", "==", obj.password).exists()) {
                 return Promise.reject("Email already exists");
             }
             await this.acebase.ref("__users__/" + userKey).set(obj);

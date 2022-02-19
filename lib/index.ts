@@ -255,7 +255,7 @@ export class LenDB {
                             res.cookie(
                                 "lenDB_token",
                                 result.token,
-                                result.expiration * 3.6e6,
+                                Infinity,
                                 {
                                     httpOnly: true,
                                 }
@@ -270,7 +270,7 @@ export class LenDB {
                             res.cookie(
                                 "lenDB_token",
                                 result.token,
-                                result.expiration * 3.6e6,
+                                Infinity,
                                 {
                                     httpOnly: true,
                                 }
@@ -303,7 +303,7 @@ export class LenDB {
                                 res.cookie(
                                     "lenDB_token",
                                     result.token,
-                                    result.expiration * 3.6e6,
+                                    Infinity,
                                     {
                                         httpOnly: true,
                                     }
