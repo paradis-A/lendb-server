@@ -211,9 +211,6 @@ export class LenDB {
                         });
                         await queryRef.find()
                     }
-
-                    if (payload?.ping) {
-                    }
                     ws.on("close", (code) => {
                         if (queryRef) {
                             queryRef.off();
@@ -231,7 +228,7 @@ export class LenDB {
                 console.log(error);
             }
         });
-        
+
         this.Server.post("/ping", async (req, res) => {
             res.json({ pong: true });
         });
@@ -316,16 +313,16 @@ export class LenDB {
                         } else if (payload.type == "update") {
                         }
                     } else {
-                        res.status(500);
+                        res.status(403);
                         res.send("Require valid payload");
                     }
                 } else {
-                    res.status(500);
+                    res.status(403);
                     res.send("Require valid payload");
                 }
             } catch (error) {
-                res.status(500);
-                res.end(error?.toString());
+                res.status(403);
+                res.json({message: error})
             }
         });
 

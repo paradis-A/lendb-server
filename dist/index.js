@@ -130,8 +130,6 @@ class LenDB {
                         });
                         await queryRef.find();
                     }
-                    if (payload?.ping) {
-                    }
                     ws.on("close", (code) => {
                         if (queryRef) {
                             queryRef.off();
@@ -215,18 +213,18 @@ class LenDB {
                         }
                     }
                     else {
-                        res.status(500);
+                        res.status(403);
                         res.send("Require valid payload");
                     }
                 }
                 else {
-                    res.status(500);
+                    res.status(403);
                     res.send("Require valid payload");
                 }
             }
             catch (error) {
-                res.status(500);
-                res.end(error?.toString());
+                res.status(403);
+                res.json({ message: error });
             }
         });
         this.Server.get("/uploads/*", async (req, res) => {
