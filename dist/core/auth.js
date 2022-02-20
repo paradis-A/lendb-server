@@ -191,4 +191,3 @@ class Auth {
     }
 }
 exports.default = Auth;
-//# sourceMappingURL=auth.js.map

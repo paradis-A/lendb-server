@@ -10,4 +10,3 @@ exports.Load = Load;
 function Destroy() {
 }
 exports.Destroy = Destroy;
-//# sourceMappingURL=ops.js.map

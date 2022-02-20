@@ -351,4 +351,3 @@ const operatorBasis = [
     ">",
     "<",
 ];
-//# sourceMappingURL=query.js.map

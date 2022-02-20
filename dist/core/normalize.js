@@ -32,4 +32,3 @@ function Normalize(data) {
     return res;
 }
 exports.default = Normalize;
-//# sourceMappingURL=normalize.js.map

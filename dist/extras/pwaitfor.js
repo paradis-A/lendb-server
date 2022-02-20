@@ -51,4 +51,3 @@ async function pWaitFor(condition, options = {}) {
 exports.default = pWaitFor;
 var ptimeout_2 = require("./ptimeout");
 Object.defineProperty(exports, "TimeoutError", { enumerable: true, get: function () { return ptimeout_2.TimeoutError; } });
-//# sourceMappingURL=pwaitfor.js.map

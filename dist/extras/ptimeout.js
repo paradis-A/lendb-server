@@ -59,4 +59,3 @@ function pTimeout(promise, milliseconds, fallback, options) {
     return cancelablePromise;
 }
 exports.default = pTimeout;
-//# sourceMappingURL=ptimeout.js.map

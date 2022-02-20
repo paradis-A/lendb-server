@@ -4,4 +4,3 @@ exports.Account = void 0;
 class Account {
 }
 exports.Account = Account;
-//# sourceMappingURL=account.js.map

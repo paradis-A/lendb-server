@@ -930,4 +930,3 @@ class Serializer {
     }
 }
 exports.default = Serializer;
-//# sourceMappingURL=serializer.js.map

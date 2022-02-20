@@ -106,4 +106,3 @@ class iLenQueryFilter {
     }
 }
 exports.default = iLenQueryFilter;
-//# sourceMappingURL=queryfilter.js.map

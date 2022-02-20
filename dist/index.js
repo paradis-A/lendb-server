@@ -282,4 +282,3 @@ class LenDB {
 }
 exports.LenDB = LenDB;
 exports.default = LenDB;
-//# sourceMappingURL=index.js.map
