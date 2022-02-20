@@ -282,7 +282,6 @@ export default class LenQuery {
                 }
                 //@ts-ignore
                 clone.sorts = tempSorts;
-                console.log(tempSorts);
             }
             if (page && typeof page == "number") clone.page = page;
             if (limit && typeof limit == "number") clone.limit = limit;

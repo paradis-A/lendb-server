@@ -42,9 +42,7 @@ export default class Serializer {
     }): Promise<any>;
     Upload(req: Request, res: Response, uploadPath: string): Promise<void>;
     protected generateSearchString(data: any): string;
-    protected Search(ref: string, word: string): Promise<string[]>;
     protected ProcessLink(ref: string, key: string, data: any): Promise<any>;
-    searchAndGroup(ref: string, transation: any, groupVar: string[]): void;
     protected autoIndex(path: string, data: any): Promise<boolean>;
     protected toWildCardPath(ref: string): string;
     protected sanitizeRefference(ref: string): string;
@@ -66,10 +64,10 @@ export default class Serializer {
         ref: string;
         searchString: string;
     }, eventEmitted: RealtimeQueryEvent): Promise<{
-        data: any;
+        newData: any;
         count: number;
         index: number;
-        newData: any[];
+        data: any[];
     }>;
     applyFilters(payload: any, queryRef: DataReferenceQuery): DataReferenceQuery;
 }

@@ -39,15 +39,8 @@ class Serializer {
                 return resultArray;
             }
             else {
-                const operations = [
-                    "save",
-                    "load",
-                    "query",
-                    "destroy",
-                    "exists",
-                ];
-                if (!payload?.operation ||
-                    !operations.includes(payload?.operation)) {
+                const operations = ["save", "load", "query", "destroy", "exists"];
+                if (!payload?.operation || !operations.includes(payload?.operation)) {
                     return Promise.reject("Error: Invalid operation.");
                 }
                 let transaction = payload;
@@ -87,9 +80,7 @@ class Serializer {
     }
     ExecuteHook(event, ref, data, req, res, user) {
         if (ref && typeof ref == "string" && event) {
-            return this.refHooks
-                .find((h) => h.ref == ref && h.event == event)
-                ?.callback(data, req, res, user);
+            return this.refHooks.find((h) => h.ref == ref && h.event == event)?.callback(data, req, res, user);
         }
         else if (event && !ref) {
             this.authHook.find((a) => a.event == event)?.callback(data);
@@ -343,17 +334,6 @@ class Serializer {
             const refference = singular ? ref : ref + "/" + key;
             !singular || delete data.key;
             let instance = this.acebase.ref(refference);
-            //! queue only supports coming from server instance at this moment
-            //TODO: use bull and redis
-            //TODO: queue support for lendb-client
-            // if (!server && queue) {
-            //     transaction.eventHandles.queue = false; //do not repeat the queue
-            //     if (!this.Queue[refference])
-            //         this.Queue[refference] = new Queue({ concurrency: 1 });
-            //     //@ts-ignore
-            //     this.Queue[refference].add(this.Save(transaction, server));
-            //     return Promise.resolve({});
-            // }
             const exists = await instance.exists();
             const event = {
                 before: exists ? "beforeUpdate" : "beforeAdd",
@@ -397,7 +377,6 @@ class Serializer {
                     this.acebase.indexes.create(ref, "key");
                 }
             }
-            console.log(await this.acebase.indexes.get());
             delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
@@ -427,8 +406,7 @@ class Serializer {
                     let file = arrbuff.file;
                     if (file) {
                         let tempFilename = file?.name;
-                        if (typeof tempFilename == "string" &&
-                            tempFilename.split("-$-").length == 2) {
+                        if (typeof tempFilename == "string" && tempFilename.split("-$-").length == 2) {
                             let splitted = tempFilename.split("-$-");
                             let key = splitted[0];
                             let filename = splitted[1];
@@ -443,15 +421,11 @@ class Serializer {
                                 filename,
                                 savename,
                             };
-                            if (await this.acebase
-                                .ref("__uploads__/" + key)
-                                .exists()) {
+                            if (await this.acebase.ref("__uploads__/" + key).exists()) {
                                 res.json({ key, filename, url: savename });
                             }
                             await arrbuff.write(uploadPath + savename);
-                            await this.acebase
-                                .ref("__uploads__/" + key)
-                                .set(props);
+                            await this.acebase.ref("__uploads__/" + key).set(props);
                             res.end(JSON.stringify({
                                 key,
                                 filename,
@@ -493,18 +467,6 @@ class Serializer {
             return null;
         }
     }
-    async Search(ref, word) {
-        try {
-            let t = (await this.acebase
-                .query("__search_/" + ref)
-                .filter("word", "like", "*" + word + "*")
-                .get({ include: ["key"] })).map((s) => s.val().key);
-            return Promise.resolve(t);
-        }
-        catch (error) {
-            return Promise.reject(error);
-        }
-    }
     //implement last and first query
     //delete where
     async ProcessLink(ref, key, data) {
@@ -525,10 +487,7 @@ class Serializer {
                             updates[targetField] = data[sourceField];
                         }
                     }
-                    const targets = await this.acebase
-                        .query(source.target)
-                        .filter(source.identity, "==", key)
-                        .find();
+                    const targets = await this.acebase.query(source.target).filter(source.identity, "==", key).find();
                     for (const snap of targets) {
                         await snap.update(updates);
                     }
@@ -541,10 +500,7 @@ class Serializer {
                 if (!sourceKey) {
                     return Promise.reject(null);
                 }
-                let source = (await this.acebase
-                    .query(target.source)
-                    .filter("key", "==", sourceKey)
-                    .get())[0].val();
+                let source = (await this.acebase.query(target.source).filter("key", "==", sourceKey).get())[0].val();
                 for (const field of target.fields) {
                     const { sourceField, targetField } = field;
                     if (sourceField in source) {
@@ -558,7 +514,6 @@ class Serializer {
             return Promise.reject(error);
         }
     }
-    searchAndGroup(ref, transation, groupVar) { }
     async autoIndex(path, data) {
         try {
             if ((0, lodash_1.isObject)(data)) {
@@ -623,30 +578,8 @@ class Serializer {
                 }
             }
             queryRef = this.applyFilters(clone, queryRef);
-            if (clone["searchString"] &&
-                typeof clone["searchString"] == "string") {
-                queryRef.filter(SEARCH_FIELD, "like", "*" + clone["searchString"] + "*");
-            }
-            const { aggregates, skip, limit, page, filters, exclusion, inclusion, sorts, searchString, } = clone;
-            let transactionCopy = {
-                ref,
-                filters,
-                skip,
-                limit,
-                page,
-                exclusion,
-                inclusion,
-                sorts,
-                searchString,
-                aggregates,
-            };
+            const { aggregates, limit, exclusion, inclusion } = clone;
             let count = 0;
-            if (live && live == true && cuid_1.default.isCuid(subscriptionKey)) {
-                await this.emitter.emit("setLiveQueryRefference", {
-                    transaction: transactionCopy,
-                    subscriptionKey,
-                });
-            }
             let data = [];
             if ((0, lodash_1.isObject)(aggregates) && !(0, lodash_1.isDate)(aggregates)) {
                 queryRef.take(Infinity);
@@ -658,8 +591,7 @@ class Serializer {
                 let inclusions = [aggregates.groupBy];
                 //@ts-ignore
                 for (const aggregation of aggregates.list) {
-                    if (!inclusions.includes(aggregation.field) &&
-                        aggregation.type != "COUNT") {
+                    if (!inclusions.includes(aggregation.field) && aggregation.type != "COUNT") {
                         inclusions.push(aggregation.field);
                     }
                 }
@@ -681,8 +613,7 @@ class Serializer {
                             }
                             let value = snap.val();
                             let group = value != undefined ? value[groupKey] : null;
-                            if (group != undefined &&
-                                !tempGroups.includes(group)) {
+                            if (group != undefined && !tempGroups.includes(group)) {
                                 tempGroups.push(group);
                                 await searchAndGroup(tempGroups);
                                 return false;
@@ -704,9 +635,7 @@ class Serializer {
                     count = 0;
                 }
                 else {
-                    await queryRef
-                        .filter("type", "in", searchedGroup)
-                        .forEach({ include: inclusions }, (snap) => {
+                    await queryRef.filter("type", "in", searchedGroup).forEach({ include: inclusions }, (snap) => {
                         if (Object.keys(groups).length == limit) {
                             return false;
                         }
@@ -716,33 +645,26 @@ class Serializer {
                         for (const aggregation of aggregates.list) {
                             if (!(aggregation.alias in groups[group])) {
                                 if (aggregation.operation == "MIN") {
-                                    groups[group][aggregation.alias] =
-                                        value[aggregation.field];
+                                    groups[group][aggregation.alias] = value[aggregation.field];
                                 }
                                 else if (aggregation.operation == "MAX") {
-                                    groups[group][aggregation.alias] =
-                                        value[aggregation.field];
+                                    groups[group][aggregation.alias] = value[aggregation.field];
                                 }
                                 else if (aggregation.operation == "SUM") {
-                                    groups[group][aggregation.alias] =
-                                        value[aggregation.field];
+                                    groups[group][aggregation.alias] = value[aggregation.field];
                                 }
                                 else if (aggregation.operation == "AVG") {
-                                    if (!(`${group}.${aggregation.alias}` in
-                                        undefinedRefs))
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
                                         undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
-                                    if (!(`${group}.${aggregation.alias}` in
-                                        sumRefs)) {
+                                    if (!(`${group}.${aggregation.alias}` in sumRefs)) {
                                         sumRefs[`${group}.${aggregation.alias}`] = value[aggregation.field];
                                     }
                                     else {
                                         sumRefs[`${group}.${aggregation.alias}`] += value[aggregation.field];
                                     }
                                 }
-                                else if (aggregation.operation == "COUNT" ||
-                                    aggregation.operation == "AVG") {
-                                    if (!(`${group}.${aggregation.alias}` in
-                                        undefinedRefs))
+                                else if (aggregation.operation == "COUNT" || aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
                                         undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
                                     if (!(group in countRefs)) {
                                         countRefs[group] = 1;
@@ -755,29 +677,24 @@ class Serializer {
                             else {
                                 if (aggregation.operation == "MIN") {
                                     groups[group][aggregation.alias] =
-                                        groups[group][aggregation.alias] <
-                                            value[aggregation.field]
+                                        groups[group][aggregation.alias] < value[aggregation.field]
                                             ? groups[group][aggregation.alias]
                                             : value[aggregation.field];
                                 }
                                 else if (aggregation.operation == "MAX") {
                                     groups[group][aggregation.alias] =
-                                        groups[group][aggregation.alias] >
-                                            value[aggregation.field]
+                                        groups[group][aggregation.alias] > value[aggregation.field]
                                             ? groups[group][aggregation.alias]
                                             : value[aggregation.field];
                                 }
                                 else if (aggregation.operation == "SUM") {
                                     groups[group][aggregation.alias] =
-                                        groups[group][aggregation.alias] +
-                                            value[aggregation.field];
+                                        groups[group][aggregation.alias] + value[aggregation.field];
                                 }
                                 else if (aggregation.operation == "AVG") {
-                                    if (!(`${group}.${aggregation.alias}` in
-                                        undefinedRefs))
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
                                         undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
-                                    if (!(`${group}.${aggregation.alias}` in
-                                        sumRefs)) {
+                                    if (!(`${group}.${aggregation.alias}` in sumRefs)) {
                                         sumRefs[`${group}.${aggregation.alias}`] = value[aggregation.field];
                                     }
                                     else {
@@ -785,8 +702,7 @@ class Serializer {
                                     }
                                 }
                                 else if (aggregation.operation == "COUNT") {
-                                    if (!(`${group}.${aggregation.alias}` in
-                                        undefinedRefs))
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
                                         undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
                                     if (!(group in countRefs)) {
                                         countRefs[group] = 1;
@@ -824,13 +740,9 @@ class Serializer {
                         return { [groupKey]: g[0], ...g[1] };
                     });
                 }
-                //!dummy for tests
-                // data = [{ a: 1 }, { a: 1 }];
-                // count = 2;
             }
             else {
-                if ((Array.isArray(exclusion) && exclusion.length) ||
-                    (Array.isArray(inclusion) && inclusion.length)) {
+                if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
                     if (exclusion?.length && inclusion?.length) {
                         data = (await queryRef.get({
                             exclude: exclusion,
@@ -850,8 +762,7 @@ class Serializer {
             //! todo return decorated data
             if (executeHook) {
                 const afterHookData = this.ExecuteHook("afterFind", ref, { data, count }, server?.req, server?.res);
-                if (Array.isArray(afterHookData?.data) &&
-                    (0, lodash_1.isNumber)(afterHookData?.count)) {
+                if (Array.isArray(afterHookData?.data) && (0, lodash_1.isNumber)(afterHookData?.count)) {
                     return {
                         data: afterHookData.data,
                         count: afterHookData.count,
@@ -870,8 +781,8 @@ class Serializer {
         try {
             let index = -1;
             let count = 0;
-            let newData = [];
-            let data = {};
+            let data = [];
+            let newData = {};
             //@ts-ignore
             delete transaction.subscriptionKey;
             //@ts-ignore
@@ -879,18 +790,18 @@ class Serializer {
             let res = await this.Query(transaction, null);
             if (eventEmitted?.snapshot) {
                 if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
-                    data = (await eventEmitted.snapshot.ref.get()).val();
+                    newData = (await eventEmitted.snapshot.ref.get()).val();
                 }
                 else
-                    data = eventEmitted.snapshot.val();
+                    newData = eventEmitted.snapshot.val();
             }
             else {
-                data = (await eventEmitted.ref.get()).val();
+                newData = (await eventEmitted.ref.get()).val();
             }
-            index = res.data.findIndex((v) => v == data.key);
-            newData = res.data;
+            index = res.data.findIndex((v) => v == newData.key);
+            data = res.data;
             count = res.count;
-            return { data, count, index, newData };
+            return { newData, count, index, data };
         }
         catch (error) {
             return Promise.reject(error);
@@ -904,9 +815,6 @@ class Serializer {
                 queryRef.filter(f[0], f[1], f[2]);
             });
         }
-        // else{
-        //     queryRef.filter("key","!=",null)
-        // }
         if (Array.isArray(payload?.sorts)) {
             payload.sorts.forEach((s) => {
                 if (s.length > 1)

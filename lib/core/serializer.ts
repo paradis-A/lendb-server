@@ -7,19 +7,9 @@ import { AceBase } from "acebase";
 import { iRefHook, iAuthHook, iAuthEvent, iRefEvent } from "./hook";
 import type Emittery from "emittery";
 import { DataReferenceQuery } from "acebase-core";
-import {
-    cloneDeep,
-    forEach,
-    isDate,
-    isNumber,
-    isObject,
-    size,
-    uniq,
-    values,
-} from "lodash";
+import { cloneDeep, isDate, isNumber, isObject, } from "lodash";
 import Auth, { Account } from "./auth";
 import type { ObjectLink } from "./";
-// import Queue from "p-queue";
 import { RealtimeQueryEvent } from "acebase-core/types/data-reference";
 const SEARCH_FIELD = "__search_field__";
 export default class Serializer {
@@ -51,10 +41,7 @@ export default class Serializer {
         // this.searchables = searchables;
     }
 
-    async Execute(
-        payload: any,
-        server?: { req?: Request; res?: Response }
-    ): Promise<any> {
+    async Execute(payload: any, server?: { req?: Request; res?: Response }): Promise<any> {
         try {
             let result = {};
             let resultArray = [];
@@ -68,24 +55,13 @@ export default class Serializer {
                     if (transaction?.operation == "save") {
                         resultArray.push(await this.Save(transaction, server));
                     } else if (transaction?.operation == "destroy") {
-                        resultArray.push(
-                            await this.Destroy(transaction, server)
-                        );
+                        resultArray.push(await this.Destroy(transaction, server));
                     }
                 }
                 return resultArray;
             } else {
-                const operations = [
-                    "save",
-                    "load",
-                    "query",
-                    "destroy",
-                    "exists",
-                ];
-                if (
-                    !payload?.operation ||
-                    !operations.includes(payload?.operation)
-                ) {
+                const operations = ["save", "load", "query", "destroy", "exists"];
+                if (!payload?.operation || !operations.includes(payload?.operation)) {
                     return Promise.reject("Error: Invalid operation.");
                 }
                 let transaction = payload;
@@ -123,7 +99,6 @@ export default class Serializer {
         }
     }
 
-
     protected ExecuteHook(
         event: iAuthEvent | iRefEvent,
         ref: string,
@@ -133,9 +108,7 @@ export default class Serializer {
         user?: Account
     ) {
         if (ref && typeof ref == "string" && event) {
-            return this.refHooks
-                .find((h) => h.ref == ref && h.event == event)
-                ?.callback(data, req, res, user);
+            return this.refHooks.find((h) => h.ref == ref && h.event == event)?.callback(data, req, res, user);
         } else if (event && !ref) {
             this.authHook.find((a) => a.event == event)?.callback(data);
         }
@@ -167,10 +140,7 @@ export default class Serializer {
         return temp;
     }
 
-    protected async Destroy(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ) {
+    protected async Destroy(transaction: any, server: { req?: Request; res?: Response }) {
         try {
             //! Must intercept the ref when they query keys that dont belong to them
             //! when ACL implemented
@@ -191,9 +161,7 @@ export default class Serializer {
             let ref = this.sanitizeRefference(transaction?.ref);
             //secure refs
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
-                return Promise.reject(
-                    "Error: Cannot access secured refferences use  instance.User() instead."
-                );
+                return Promise.reject("Error: Cannot access secured refferences use  instance.User() instead.");
             }
             //wilcard path
             if (ref.includes("*")) {
@@ -230,16 +198,12 @@ export default class Serializer {
             }
             // check cuid key
             if (!cuid.isCuid(key) && !singular) {
-                return Promise.reject(
-                    "Error: Invalid key for the collection. Key: " + key
-                );
+                return Promise.reject("Error: Invalid key for the collection. Key: " + key);
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
-            const executeHook =
-                hook == undefined || (hook && typeof hook == "boolean");
-            const executeEmit =
-                emit == undefined || (typeof emit == "boolean" && emit);
+            const executeHook = hook == undefined || (hook && typeof hook == "boolean");
+            const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
             let instance = this.acebase.ref(refference);
@@ -259,25 +223,9 @@ export default class Serializer {
                     oldData = (await this.acebase.ref(joined).get()).val();
                 }
             }
-            if (executeHook)
-                this.ExecuteHook(
-                    "beforeDestroy",
-                    hookRef,
-                    oldData,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+            if (executeHook) this.ExecuteHook("beforeDestroy", hookRef, oldData, server?.req, server?.res, user);
             await this.acebase.ref(refference).remove();
-            if (executeHook)
-                this.ExecuteHook(
-                    "afterDestroy",
-                    hookRef,
-                    oldData,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+            if (executeHook) this.ExecuteHook("afterDestroy", hookRef, oldData, server?.req, server?.res, user);
             //! access level permission when emitting for client side
             if (executeEmit) {
                 this.emitter.emit("destroy:" + hookRef, oldData);
@@ -297,9 +245,7 @@ export default class Serializer {
             } else {
                 let splitted: string[] = ref.split("/");
                 if (splitted.some((s) => s.includes("*"))) {
-                    return Promise.reject(
-                        "Wildcards not supported on checking if refference exists"
-                    );
+                    return Promise.reject("Wildcards not supported on checking if refference exists");
                 }
                 // if(cuid.isCuid(splitted[splitted.length - 1])) return Promise.reject("")
                 splitted.push(key);
@@ -312,10 +258,7 @@ export default class Serializer {
         }
     }
 
-    protected async Load(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ) {
+    protected async Load(transaction: any, server: { req?: Request; res?: Response }) {
         try {
             //! Must intercept the ref when the keys that dont belong to them
             //! when ACL implemented
@@ -336,17 +279,9 @@ export default class Serializer {
             let ref = this.sanitizeRefference(transaction?.ref);
             let result = {};
             const hook = eventHandles?.hook;
-            const executeHook =
-                hook == undefined || (hook && typeof hook == "boolean");
+            const executeHook = hook == undefined || (hook && typeof hook == "boolean");
             if (executeHook)
-                this.ExecuteHook(
-                    "beforeLoad",
-                    this.toWildCardPath(ref),
-                    {},
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook("beforeLoad", this.toWildCardPath(ref), {}, server?.req, server?.res, user);
 
             if (singular) {
                 result = (await this.acebase.ref(ref).get()).val();
@@ -366,24 +301,14 @@ export default class Serializer {
             }
 
             if (executeHook)
-                this.ExecuteHook(
-                    "afterLoad",
-                    this.toWildCardPath(ref),
-                    {},
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                this.ExecuteHook("afterLoad", this.toWildCardPath(ref), {}, server?.req, server?.res, user);
             return Promise.resolve(result);
         } catch (error) {
             return Promise.reject(error);
         }
     }
 
-    protected async Save(
-        transaction: any,
-        server: { req?: Request; res?: Response }
-    ) {
+    protected async Save(transaction: any, server: { req?: Request; res?: Response }) {
         try {
             //! Must intercept the ref when they query keys that dont belong to them
             //! when ACL implemented
@@ -404,9 +329,7 @@ export default class Serializer {
             let ref = this.sanitizeRefference(transaction.ref);
             //wilcard path
             if (ref.includes("*")) {
-                return Promise.reject(
-                    "Error: Adding or Updating must not contain wildcard path"
-                );
+                return Promise.reject("Error: Adding or Updating must not contain wildcard path");
             }
             //check if path have cuid
             // if (singular) {
@@ -424,26 +347,13 @@ export default class Serializer {
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
             const queue = eventHandles?.queue;
-            const executeHook =
-                hook == undefined || (typeof hook == "boolean" && hook);
-            const executeEmit =
-                emit == undefined || (typeof emit == "boolean" && emit);
+            const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
+            const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             let data: any = this.getData(Object.assign({}, transaction));
             const hookRef = singular ? ref : this.toWildCardPath(ref);
             const refference = singular ? ref : ref + "/" + key;
             !singular || delete data.key;
             let instance = this.acebase.ref(refference);
-            //! queue only supports coming from server instance at this moment
-            //TODO: use bull and redis
-            //TODO: queue support for lendb-client
-            // if (!server && queue) {
-            //     transaction.eventHandles.queue = false; //do not repeat the queue
-            //     if (!this.Queue[refference])
-            //         this.Queue[refference] = new Queue({ concurrency: 1 });
-            //     //@ts-ignore
-            //     this.Queue[refference].add(this.Save(transaction, server));
-            //     return Promise.resolve({});
-            // }
             const exists = await instance.exists();
             const event: {
                 before: iAuthEvent | iRefEvent;
@@ -453,14 +363,7 @@ export default class Serializer {
                 after: exists ? "afterUpdate" : "afterAdd",
             };
             if (executeHook) {
-                const hookData = await this.ExecuteHook(
-                    event.before,
-                    hookRef,
-                    data,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                const hookData = await this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
                 if (hookData && isObject(hookData) && !isDate(hookData)) {
                     console.log(hookData);
                     Object.assign(data, hookData);
@@ -491,21 +394,13 @@ export default class Serializer {
                         return i.path == ref && key == "key";
                     })
                 ) {
-                    this.acebase.indexes.create(ref,"key")
+                    this.acebase.indexes.create(ref, "key");
                 }
             }
-            console.log(await this.acebase.indexes.get());
             delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
-                await this.ExecuteHook(
-                    event.after,
-                    hookRef,
-                    returnData,
-                    server?.req,
-                    server?.res,
-                    user
-                );
+                await this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
             }
 
             //! access level permission when emitting for client side
@@ -531,16 +426,11 @@ export default class Serializer {
                     let file = arrbuff.file;
                     if (file) {
                         let tempFilename = file?.name;
-                        if (
-                            typeof tempFilename == "string" &&
-                            tempFilename.split("-$-").length == 2
-                        ) {
+                        if (typeof tempFilename == "string" && tempFilename.split("-$-").length == 2) {
                             let splitted = tempFilename.split("-$-");
                             let key = splitted[0];
                             let filename = splitted[1];
-                            let ext = filename.substring(
-                                filename.lastIndexOf(".")
-                            );
+                            let ext = filename.substring(filename.lastIndexOf("."));
                             let savename = cuid();
                             ext = ext.split(" ").join("");
                             if (ext != filename) savename = savename + ext;
@@ -550,17 +440,11 @@ export default class Serializer {
                                 filename,
                                 savename,
                             };
-                            if (
-                                await this.acebase
-                                    .ref("__uploads__/" + key)
-                                    .exists()
-                            ) {
+                            if (await this.acebase.ref("__uploads__/" + key).exists()) {
                                 res.json({ key, filename, url: savename });
                             }
                             await arrbuff.write(uploadPath + savename);
-                            await this.acebase
-                                .ref("__uploads__/" + key)
-                                .set(props);
+                            await this.acebase.ref("__uploads__/" + key).set(props);
                             res.end(
                                 JSON.stringify({
                                     key,
@@ -601,20 +485,6 @@ export default class Serializer {
         }
     }
 
-    protected async Search(ref: string, word: string): Promise<string[]> {
-        try {
-            let t = (
-                await this.acebase
-                    .query("__search_/" + ref)
-                    .filter("word", "like", "*" + word + "*")
-                    .get({ include: ["key"] })
-            ).map((s) => s.val().key);
-            return Promise.resolve(t);
-        } catch (error) {
-            return Promise.reject(error);
-        }
-    }
-
     //implement last and first query
     //delete where
 
@@ -625,13 +495,9 @@ export default class Serializer {
             }
 
             let wildcardRef = this.toWildCardPath(ref);
-            let fromSource = this.links.filter(
-                (link) => link.source == wildcardRef
-            );
+            let fromSource = this.links.filter((link) => link.source == wildcardRef);
 
-            let fromTarget = this.links.find(
-                (link) => link.target == wildcardRef
-            );
+            let fromTarget = this.links.find((link) => link.target == wildcardRef);
 
             if (fromSource.length) {
                 //get the targets and set the update
@@ -643,10 +509,7 @@ export default class Serializer {
                             updates[targetField] = data[sourceField];
                         }
                     }
-                    const targets = await this.acebase
-                        .query(source.target)
-                        .filter(source.identity, "==", key)
-                        .find();
+                    const targets = await this.acebase.query(source.target).filter(source.identity, "==", key).find();
                     for (const snap of targets) {
                         await snap.update(updates);
                     }
@@ -660,12 +523,7 @@ export default class Serializer {
                 if (!sourceKey) {
                     return Promise.reject(null);
                 }
-                let source = (
-                    await this.acebase
-                        .query(target.source)
-                        .filter("key", "==", sourceKey)
-                        .get()
-                )[0].val();
+                let source = (await this.acebase.query(target.source).filter("key", "==", sourceKey).get())[0].val();
                 for (const field of target.fields) {
                     const { sourceField, targetField } = field;
                     if (sourceField in source) {
@@ -678,8 +536,6 @@ export default class Serializer {
             return Promise.reject(error);
         }
     }
-
-    searchAndGroup(ref: string, transation: any, groupVar: string[]) {}
 
     protected async autoIndex(path: string, data: any) {
         try {
@@ -734,70 +590,21 @@ export default class Serializer {
         try {
             const { ref, hook, live, subscriptionKey } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
-                return Promise.reject(
-                    "Error: cannot access secured refferences use  instance.User() instead."
-                );
+                return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
             let clone = cloneDeep(transaction);
             let queryRef = this.acebase.query(ref);
-            const executeHook =
-                hook == undefined || (typeof hook == "boolean" && hook);
+            const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             if (executeHook) {
-                const hookedQuery = this.ExecuteHook(
-                    "beforeFind",
-                    ref,
-                    clone,
-                    server?.req,
-                    server?.res
-                );
+                const hookedQuery = this.ExecuteHook("beforeFind", ref, clone, server?.req, server?.res);
                 if (hookedQuery) {
                     clone = hookedQuery;
                 }
             }
             queryRef = this.applyFilters(clone, queryRef);
-            if (
-                clone["searchString"] &&
-                typeof clone["searchString"] == "string"
-            ) {
-                queryRef.filter(
-                    SEARCH_FIELD,
-                    "like",
-                    "*" + clone["searchString"] + "*"
-                );
-            }
-            const {
-                aggregates,
-                skip,
-                limit,
-                page,
-                filters,
-                exclusion,
-                inclusion,
-                sorts,
-                searchString,
-            } = clone;
-            let transactionCopy = {
-                ref,
-                filters,
-                skip,
-                limit,
-                page,
-                exclusion,
-                inclusion,
-                sorts,
-                searchString,
-                aggregates,
-            };
+            const { aggregates,  limit,  exclusion, inclusion} = clone;
             let count = 0;
-            if (live && live == true && cuid.isCuid(subscriptionKey)) {
-                await this.emitter.emit("setLiveQueryRefference", {
-                    transaction: transactionCopy,
-                    subscriptionKey,
-                });
-            }
-
             let data: any[] = [];
-
             if (isObject(aggregates) && !isDate(aggregates)) {
                 queryRef.take(Infinity);
                 let groups = {};
@@ -810,10 +617,7 @@ export default class Serializer {
                 let inclusions: string[] = [aggregates.groupBy];
                 //@ts-ignore
                 for (const aggregation of aggregates.list) {
-                    if (
-                        !inclusions.includes(aggregation.field) &&
-                        aggregation.type != "COUNT"
-                    ) {
+                    if (!inclusions.includes(aggregation.field) && aggregation.type != "COUNT") {
                         inclusions.push(aggregation.field);
                     }
                 }
@@ -824,40 +628,29 @@ export default class Serializer {
                 const searchAndGroup = async (groupRes: string[]) => {
                     try {
                         let tempGroups = groupRes;
-                        let groupQuery = this.applyFilters(
-                            clone,
-                            this.acebase.query(ref)
-                        );
+                        let groupQuery = this.applyFilters(clone, this.acebase.query(ref));
                         if (tempGroups.length) {
                             groupQuery.filter(groupKey, "!in", tempGroups);
                         }
                         groupQuery.take(Infinity);
-                        await groupQuery.forEach(
-                            { include: inclusions },
-                            async (snap) => {
-                                if (Object.keys(tempGroups).length == limit) {
-                                    return false;
-                                }
-                                let value = snap.val();
-                                let group =
-                                    value != undefined ? value[groupKey] : null;
-                                if (
-                                    group != undefined &&
-                                    !tempGroups.includes(group)
-                                ) {
-                                    tempGroups.push(group);
-                                    await searchAndGroup(tempGroups);
-                                    return false;
-                                }
+                        await groupQuery.forEach({ include: inclusions }, async (snap) => {
+                            if (Object.keys(tempGroups).length == limit) {
+                                return false;
                             }
-                        );
+                            let value = snap.val();
+                            let group = value != undefined ? value[groupKey] : null;
+                            if (group != undefined && !tempGroups.includes(group)) {
+                                tempGroups.push(group);
+                                await searchAndGroup(tempGroups);
+                                return false;
+                            }
+                        });
                         searchedGroup = [...tempGroups];
                         return Promise.resolve(false);
                     } catch (error) {
                         throw error;
                     }
                 };
-
                 await searchAndGroup(searchedGroup);
                 for (const sg of searchedGroup) {
                     groups[sg] = {};
@@ -866,135 +659,72 @@ export default class Serializer {
                     data = [];
                     count = 0;
                 } else {
-                    await queryRef
-                        .filter("type", "in", searchedGroup)
-                        .forEach({ include: inclusions }, (snap) => {
-                            if (Object.keys(groups).length == limit) {
-                                return false;
-                            }
-                            let value = snap.val();
-                            let group = value[groupKey];
-                            //@ts-ignore
-                            for (const aggregation of aggregates.list) {
-                                if (!(aggregation.alias in groups[group])) {
-                                    if (aggregation.operation == "MIN") {
-                                        groups[group][aggregation.alias] =
-                                            value[aggregation.field];
-                                    } else if (aggregation.operation == "MAX") {
-                                        groups[group][aggregation.alias] =
-                                            value[aggregation.field];
-                                    } else if (aggregation.operation == "SUM") {
-                                        groups[group][aggregation.alias] =
-                                            value[aggregation.field];
-                                    } else if (aggregation.operation == "AVG") {
-                                        if (
-                                            !(
-                                                `${group}.${aggregation.alias}` in
-                                                undefinedRefs
-                                            )
-                                        )
-                                            undefinedRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] = aggregation.operation;
-                                        if (
-                                            !(
-                                                `${group}.${aggregation.alias}` in
-                                                sumRefs
-                                            )
-                                        ) {
-                                            sumRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] = value[aggregation.field];
-                                        } else {
-                                            sumRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] += value[aggregation.field];
-                                        }
-                                    } else if (
-                                        aggregation.operation == "COUNT" ||
-                                        aggregation.operation == "AVG"
-                                    ) {
-                                        if (
-                                            !(
-                                                `${group}.${aggregation.alias}` in
-                                                undefinedRefs
-                                            )
-                                        )
-                                            undefinedRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] = aggregation.operation;
-                                        if (!(group in countRefs)) {
-                                            countRefs[group] = 1;
-                                        } else {
-                                            countRefs[group] += 1;
-                                        }
+                    await queryRef.filter("type", "in", searchedGroup).forEach({ include: inclusions }, (snap) => {
+                        if (Object.keys(groups).length == limit) {
+                            return false;
+                        }
+                        let value = snap.val();
+                        let group = value[groupKey];
+                        //@ts-ignore
+                        for (const aggregation of aggregates.list) {
+                            if (!(aggregation.alias in groups[group])) {
+                                if (aggregation.operation == "MIN") {
+                                    groups[group][aggregation.alias] = value[aggregation.field];
+                                } else if (aggregation.operation == "MAX") {
+                                    groups[group][aggregation.alias] = value[aggregation.field];
+                                } else if (aggregation.operation == "SUM") {
+                                    groups[group][aggregation.alias] = value[aggregation.field];
+                                } else if (aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(`${group}.${aggregation.alias}` in sumRefs)) {
+                                        sumRefs[`${group}.${aggregation.alias}`] = value[aggregation.field];
+                                    } else {
+                                        sumRefs[`${group}.${aggregation.alias}`] += value[aggregation.field];
                                     }
-                                } else {
-                                    if (aggregation.operation == "MIN") {
-                                        groups[group][aggregation.alias] =
-                                            groups[group][aggregation.alias] <
-                                            value[aggregation.field]
-                                                ? groups[group][
-                                                      aggregation.alias
-                                                  ]
-                                                : value[aggregation.field];
-                                    } else if (aggregation.operation == "MAX") {
-                                        groups[group][aggregation.alias] =
-                                            groups[group][aggregation.alias] >
-                                            value[aggregation.field]
-                                                ? groups[group][
-                                                      aggregation.alias
-                                                  ]
-                                                : value[aggregation.field];
-                                    } else if (aggregation.operation == "SUM") {
-                                        groups[group][aggregation.alias] =
-                                            groups[group][aggregation.alias] +
-                                            value[aggregation.field];
-                                    } else if (aggregation.operation == "AVG") {
-                                        if (
-                                            !(
-                                                `${group}.${aggregation.alias}` in
-                                                undefinedRefs
-                                            )
-                                        )
-                                            undefinedRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] = aggregation.operation;
-                                        if (
-                                            !(
-                                                `${group}.${aggregation.alias}` in
-                                                sumRefs
-                                            )
-                                        ) {
-                                            sumRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] = value[aggregation.field];
-                                        } else {
-                                            sumRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] += value[aggregation.field];
-                                        }
-                                    } else if (
-                                        aggregation.operation == "COUNT"
-                                    ) {
-                                        if (
-                                            !(
-                                                `${group}.${aggregation.alias}` in
-                                                undefinedRefs
-                                            )
-                                        )
-                                            undefinedRefs[
-                                                `${group}.${aggregation.alias}`
-                                            ] = aggregation.operation;
-                                        if (!(group in countRefs)) {
-                                            countRefs[group] = 1;
-                                        } else {
-                                            countRefs[group] += 1;
-                                        }
+                                } else if (aggregation.operation == "COUNT" || aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(group in countRefs)) {
+                                        countRefs[group] = 1;
+                                    } else {
+                                        countRefs[group] += 1;
+                                    }
+                                }
+                            } else {
+                                if (aggregation.operation == "MIN") {
+                                    groups[group][aggregation.alias] =
+                                        groups[group][aggregation.alias] < value[aggregation.field]
+                                            ? groups[group][aggregation.alias]
+                                            : value[aggregation.field];
+                                } else if (aggregation.operation == "MAX") {
+                                    groups[group][aggregation.alias] =
+                                        groups[group][aggregation.alias] > value[aggregation.field]
+                                            ? groups[group][aggregation.alias]
+                                            : value[aggregation.field];
+                                } else if (aggregation.operation == "SUM") {
+                                    groups[group][aggregation.alias] =
+                                        groups[group][aggregation.alias] + value[aggregation.field];
+                                } else if (aggregation.operation == "AVG") {
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(`${group}.${aggregation.alias}` in sumRefs)) {
+                                        sumRefs[`${group}.${aggregation.alias}`] = value[aggregation.field];
+                                    } else {
+                                        sumRefs[`${group}.${aggregation.alias}`] += value[aggregation.field];
+                                    }
+                                } else if (aggregation.operation == "COUNT") {
+                                    if (!(`${group}.${aggregation.alias}` in undefinedRefs))
+                                        undefinedRefs[`${group}.${aggregation.alias}`] = aggregation.operation;
+                                    if (!(group in countRefs)) {
+                                        countRefs[group] = 1;
+                                    } else {
+                                        countRefs[group] += 1;
                                     }
                                 }
                             }
-                        });
+                        }
+                    });
                     for (const undefinedRef of Object.entries(undefinedRefs)) {
                         let keySplit = undefinedRef[0].split(".");
                         const group = keySplit[0];
@@ -1020,15 +750,8 @@ export default class Serializer {
                         return { [groupKey]: g[0], ...g[1] };
                     });
                 }
-
-                //!dummy for tests
-                // data = [{ a: 1 }, { a: 1 }];
-                // count = 2;
             } else {
-                if (
-                    (Array.isArray(exclusion) && exclusion.length) ||
-                    (Array.isArray(inclusion) && inclusion.length)
-                ) {
+                if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
                     if (exclusion?.length && inclusion?.length) {
                         data = (
                             await queryRef.get({
@@ -1037,13 +760,9 @@ export default class Serializer {
                             })
                         ).map((snap) => snap.val());
                     } else if (exclusion?.length) {
-                        data = (await queryRef.get({ exclude: exclusion })).map(
-                            (snap) => snap.val()
-                        );
+                        data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
                     } else if (inclusion?.length) {
-                        data = (await queryRef.get({ include: inclusion })).map(
-                            (snap) => snap.val()
-                        );
+                        data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
                     }
                 }
                 data = (await queryRef.get()).map((snap) => snap.val());
@@ -1051,17 +770,8 @@ export default class Serializer {
             }
             //! todo return decorated data
             if (executeHook) {
-                const afterHookData = this.ExecuteHook(
-                    "afterFind",
-                    ref,
-                    { data, count },
-                    server?.req,
-                    server?.res
-                );
-                if (
-                    Array.isArray(afterHookData?.data) &&
-                    isNumber(afterHookData?.count)
-                ) {
+                const afterHookData = this.ExecuteHook("afterFind", ref, { data, count }, server?.req, server?.res);
+                if (Array.isArray(afterHookData?.data) && isNumber(afterHookData?.count)) {
                     return {
                         data: afterHookData.data,
                         count: afterHookData.count,
@@ -1093,8 +803,8 @@ export default class Serializer {
         try {
             let index = -1;
             let count = 0;
-            let newData: any[] = [];
-            let data: any = {};
+            let data: any[] = [];
+            let newData: any = {};
             //@ts-ignore
             delete transaction.subscriptionKey;
             //@ts-ignore
@@ -1102,15 +812,15 @@ export default class Serializer {
             let res = await this.Query(transaction, null);
             if (eventEmitted?.snapshot) {
                 if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
-                    data = (await eventEmitted.snapshot.ref.get()).val();
-                } else data = eventEmitted.snapshot.val();
+                    newData = (await eventEmitted.snapshot.ref.get()).val();
+                } else newData = eventEmitted.snapshot.val();
             } else {
-                data = (await eventEmitted.ref.get()).val();
+                newData = (await eventEmitted.ref.get()).val();
             }
-            index = res.data.findIndex((v) => v == data.key);
-            newData = res.data;
+            index = res.data.findIndex((v) => v == newData.key);
+            data = res.data;
             count = res.count;
-            return { data, count, index, newData };
+            return { newData, count, index, data };
         } catch (error) {
             return Promise.reject(error);
         }
@@ -1124,11 +834,6 @@ export default class Serializer {
                 queryRef.filter(f[0], f[1], f[2]);
             });
         }
-
-        // else{
-        //     queryRef.filter("key","!=",null)
-        // }
-
         if (Array.isArray(payload?.sorts)) {
             payload.sorts.forEach((s) => {
                 if (s.length > 1) queryRef.sort(s[0], s[1]);
@@ -1138,8 +843,7 @@ export default class Serializer {
         queryRef.take(payload?.limit || 100);
         queryRef.skip(payload?.skip || 0);
         if (payload?.page && payload?.page > 1) {
-            if (payload?.take)
-                queryRef.skip((payload?.page - 1) * payload?.limit);
+            if (payload?.take) queryRef.skip((payload?.page - 1) * payload?.limit);
             else queryRef.skip((payload?.page - 1) * 100);
         } else {
             queryRef.skip(0);

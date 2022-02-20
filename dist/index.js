@@ -12,15 +12,13 @@ const emittery_1 = __importDefault(require("emittery"));
 //@ts-ignore
 const live_directory_1 = __importDefault(require("live-directory"));
 const graceful_fs_1 = __importDefault(require("graceful-fs"));
-const cuid_1 = __importDefault(require("cuid"));
-const pwaitfor_1 = __importDefault(require("./extras/pwaitfor"));
 class LenDB {
     constructor(appname, settings, serverOptions) {
         this.links = [];
         this._uploadPath = "./uploads";
         this.AccessControlList = [];
         this.liveQueryRefferences = [];
-        this.Server = new hyper_express_1.default.Server({ max_body_length: 100000000 });
+        this.Server = new hyper_express_1.default.Server({ max_body_length: Infinity });
         this.acebase = new acebase_1.AceBase(appname, settings);
         this.auth = new core_1.Auth(this.acebase);
         this.emitter = new emittery_1.default();
@@ -33,9 +31,6 @@ class LenDB {
         }
         this.LiveAsset = new live_directory_1.default({
             path: this._uploadPath,
-            // keep: {
-            //     extensions: [".png", ".jpg", ".jpeg"], // We only want to serve files with these extensions
-            // },
             ignore: (path) => {
                 return path.startsWith("."); // We want to ignore dotfiles for safety
             },
@@ -76,59 +71,51 @@ class LenDB {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
-                    //TODO: Execute acl here
                     let queryRef;
                     const payload = JSON.parse(payloadData);
                     let transaction;
-                    if (cuid_1.default.isCuid(payload?.subscriptionKey)) {
-                        subscriptionKey = payload?.subscriptionKey;
-                        if (payload?.reconnect == true && payload?.query) {
-                            //check acl here
-                            transaction = payload.query;
-                            queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
-                        }
-                        else {
-                            await (0, pwaitfor_1.default)(() => {
-                                return (this.liveQueryRefferences.find((lqr) => lqr.subscriptionKey ==
-                                    subscriptionKey) != undefined);
-                            });
-                            let liveQueryRefference = this.liveQueryRefferences.find((lqr) => lqr.subscriptionKey == subscriptionKey);
-                            if (liveQueryRefference != null ||
-                                liveQueryRefference != undefined)
-                                transaction = liveQueryRefference.transaction;
-                            queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
-                        }
-                        queryRef.on("add", async (realtimeQueryEvent) => {
-                            const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
-                            ws.send(JSON.stringify({
-                                type: "add",
-                                data,
-                                index,
-                                count,
-                                newData,
-                            }));
-                        });
-                        queryRef.on("change", async (realtimeQueryEvent) => {
-                            const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
-                            ws.send(JSON.stringify({
-                                type: "update",
-                                data,
-                                index,
-                                count,
-                                newData,
-                            }));
-                        });
-                        queryRef.on("remove", async (realtimeQueryEvent) => {
-                            const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
-                            ws.send(JSON.stringify({
-                                type: "destroy",
-                                data,
-                                index,
-                                count,
-                                newData,
-                            }));
-                        });
-                        await queryRef.find();
+                    subscriptionKey = payload?.subscriptionKey;
+                    transaction = payload?.query;
+                    queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
+                    queryRef.on("add", async (realtimeQueryEvent) => {
+                        const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
+                        ws.send(JSON.stringify({
+                            type: "add",
+                            data,
+                            index,
+                            count,
+                            newData,
+                        }));
+                    });
+                    queryRef.on("change", async (realtimeQueryEvent) => {
+                        const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
+                        ws.send(JSON.stringify({
+                            type: "update",
+                            data,
+                            index,
+                            count,
+                            newData,
+                        }));
+                    });
+                    queryRef.on("remove", async (realtimeQueryEvent) => {
+                        const { data, index, count, newData } = await this.Serializer.LivePayload(transaction, realtimeQueryEvent);
+                        ws.send(JSON.stringify({
+                            type: "destroy",
+                            data,
+                            index,
+                            count,
+                            newData,
+                        }));
+                    });
+                    if (payload?.reconnect == true) {
+                        queryRef.get({ exclude: ["*"] });
+                    }
+                    else {
+                        queryRef.get({ exclude: ["*"] });
+                        let queryResult = await this.Serializer.Execute(transaction);
+                        let data = queryResult.data || [];
+                        let count = queryResult.count || 0;
+                        ws.send(JSON.stringify({ type: "initialdata", data, count }));
                     }
                     ws.on("close", (code) => {
                         if (queryRef) {
@@ -236,8 +223,7 @@ class LenDB {
                 return res.status(404).send();
             return res.type(file.extension).send(file.buffer);
         });
-        this.Server.ws("/lenDB_LiveObject", async (ws) => {
-        });
+        this.Server.ws("/lenDB_LiveObject", async (ws) => { });
         this.Server.get("/lenDB_upload/:key", async (req, res) => {
             res.setHeader("Access-Control-Allow-Origin", "*");
             try {
@@ -266,13 +252,13 @@ class LenDB {
             this.initialize();
             await this.acebase.ready();
             await this.acebase.indexes.create("__uploads__", "key");
-            await this.acebase.indexes.create("__tokens__", "key", { type: 'fulltext', config: { maxLength: 100000000 } });
+            await this.acebase.indexes.create("__tokens__", "key", {
+                type: "fulltext",
+                config: { maxLength: Infinity },
+            });
             this.Serializer = new core_1.Serializer(this.acebase, this.emitter, this.hook.refHooks, this.hook.authHooks, null, this.links, this.Server.uws_instance);
             let status = await this.Server.listen(port, host);
             console.log(`Server is running at ${host}:${port}`);
-            this.emitter.on("setLiveQueryRefference", (query) => {
-                this.liveQueryRefferences.push(query);
-            });
             return Promise.resolve(status);
         }
         catch (error) {

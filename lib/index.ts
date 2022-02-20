@@ -1,14 +1,6 @@
 import HyperExpress from "hyper-express";
 import { AceBase, AceBaseLocalSettings } from "acebase";
-import {
-    Serializer,
-    LenQuery,
-    LenObject,
-    Hook,
-    Auth,
-    ObjectLink,
-    ACL as ACLConfig,
-} from "./core";
+import { Serializer, LenQuery, LenObject, Hook, Auth, ObjectLink, ACL as ACLConfig } from "./core";
 export type { LenObject, LenQuery } from "./core";
 // import Figlet from "figlet";
 import Emittery from "emittery";
@@ -18,6 +10,7 @@ import fs from "graceful-fs";
 import cuid from "cuid";
 import { DataReferenceQuery } from "acebase-core";
 import pWaitFor from "./extras/pwaitfor";
+import { isDate, isObject } from "lodash";
 export class LenDB {
     protected Serializer: Serializer;
     readonly acebase: AceBase;
@@ -43,33 +36,25 @@ export class LenDB {
         };
         subscriptionKey: string;
     }[] = [];
-    constructor(
-        appname: string,
-        settings?: AceBaseLocalSettings,
-        serverOptions?: { uploadPath: string }
-    ) {
-        this.Server = new HyperExpress.Server({ max_body_length: 100000000 });
+    constructor(appname: string, settings?: AceBaseLocalSettings, serverOptions?: { uploadPath: string }) {
+        this.Server = new HyperExpress.Server({ max_body_length: Infinity });
         this.acebase = new AceBase(appname, settings);
         this.auth = new Auth(this.acebase);
         this.emitter = new Emittery();
         this.hook = new Hook();
-        if (serverOptions?.uploadPath)
-            this._uploadPath = serverOptions?.uploadPath;
+        if (serverOptions?.uploadPath) this._uploadPath = serverOptions?.uploadPath;
         if (!fs.existsSync(this._uploadPath)) {
             //@ts-ignore
             fs.mkdirSync(this._uploadPath, { recursive: true });
         }
         this.LiveAsset = new LiveDirectory({
             path: this._uploadPath, // We want to provide the system path to the folder. Avoid using relative paths.
-            // keep: {
-            //     extensions: [".png", ".jpg", ".jpeg"], // We only want to serve files with these extensions
-            // },
             ignore: (path) => {
                 return path.startsWith("."); // We want to ignore dotfiles for safety
             },
         });
     }
-    
+
     Query(ref: string) {
         return new LenQuery(ref, this.emitter, this.Serializer);
     }
@@ -89,10 +74,7 @@ export class LenDB {
     initialize() {
         this.Server.post("/lenDB", async (req, res) => {
             try {
-                res.setHeader(
-                    "Access-Control-Allow-Origin",
-                    req.header("origin")
-                );
+                res.setHeader("Access-Control-Allow-Origin", req.header("origin"));
                 res.setHeader("Access-Control-Allow-Credentials", "true");
                 res.setHeader("Vary", "origin");
                 const payload = await req.json();
@@ -112,8 +94,6 @@ export class LenDB {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
-                    
-                    //TODO: Execute acl here
                     let queryRef: DataReferenceQuery;
                     const payload = JSON.parse(payloadData);
                     let transaction: {
@@ -127,89 +107,62 @@ export class LenDB {
                         ref: string;
                         searchString: string;
                     };
-                    if (cuid.isCuid(payload?.subscriptionKey)) {
-                        subscriptionKey = payload?.subscriptionKey;
-                        if (payload?.reconnect == true && payload?.query) {
-                            //check acl here
-                            transaction = payload.query;
-                            queryRef = this.Serializer.applyFilters(
-                                transaction,
-                                this.acebase.query(transaction.ref)
-                            );
-                        } else {
-                            await pWaitFor(() => {
-                                return (
-                                    this.liveQueryRefferences.find(
-                                        (lqr) =>
-                                            lqr.subscriptionKey ==
-                                            subscriptionKey
-                                    ) != undefined
-                                );
-                            });
-                            let liveQueryRefference =
-                                this.liveQueryRefferences.find(
-                                    (lqr) =>
-                                        lqr.subscriptionKey == subscriptionKey
-                                );
-                            if (
-                                liveQueryRefference != null ||
-                                liveQueryRefference != undefined
-                            )
-                                transaction = liveQueryRefference.transaction;
-                            queryRef = this.Serializer.applyFilters(
-                                transaction,
-                                this.acebase.query(transaction.ref)
-                            );
-                        }
-                        queryRef.on("add", async (realtimeQueryEvent) => {
-                            const { data, index, count, newData } =
-                                await this.Serializer.LivePayload(
-                                    transaction,
-                                    realtimeQueryEvent
-                                );
-                            ws.send(
-                                JSON.stringify({
-                                    type: "add",
-                                    data,
-                                    index,
-                                    count,
-                                    newData,
-                                })
-                            );
-                        });
-                        queryRef.on("change", async (realtimeQueryEvent) => {
-                            const { data, index, count, newData } =
-                                await this.Serializer.LivePayload(
-                                    transaction,
-                                    realtimeQueryEvent
-                                );
-                            ws.send(
-                                JSON.stringify({
-                                    type: "update",
-                                    data,
-                                    index,
-                                    count,
-                                    newData,
-                                })
-                            );
-                        });
-                        queryRef.on("remove", async (realtimeQueryEvent) => {
-                            const { data, index, count, newData } =
-                                await this.Serializer.LivePayload(
-                                    transaction,
-                                    realtimeQueryEvent
-                                );
-                            ws.send(
-                                JSON.stringify({
-                                    type: "destroy",
-                                    data,
-                                    index,
-                                    count,
-                                    newData,
-                                })
-                            );
-                        });
-                        await queryRef.find()
+                    subscriptionKey = payload?.subscriptionKey;
+                    transaction = payload?.query;
+                    queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
+                    queryRef.on("add", async (realtimeQueryEvent) => {
+                        const { data, index, count, newData } = await this.Serializer.LivePayload(
+                            transaction,
+                            realtimeQueryEvent
+                        );
+                        ws.send(
+                            JSON.stringify({
+                                type: "add",
+                                data,
+                                index,
+                                count,
+                                newData,
+                            })
+                        );
+                    });
+                    queryRef.on("change", async (realtimeQueryEvent) => {
+                        const { data, index, count, newData } = await this.Serializer.LivePayload(
+                            transaction,
+                            realtimeQueryEvent
+                        );
+                        ws.send(
+                            JSON.stringify({
+                                type: "update",
+                                data,
+                                index,
+                                count,
+                                newData,
+                            })
+                        );
+                    });
+                    queryRef.on("remove", async (realtimeQueryEvent) => {
+                        const { data, index, count, newData } = await this.Serializer.LivePayload(
+                            transaction,
+                            realtimeQueryEvent
+                        );
+                        ws.send(
+                            JSON.stringify({
+                                type: "destroy",
+                                data,
+                                index,
+                                count,
+                                newData,
+                            })
+                        );
+                    });
+                    if (payload?.reconnect == true) {
+                        queryRef.get({exclude: ["*"]})
+                    } else {
+                        queryRef.get({exclude: ["*"]})
+                        let queryResult = await this.Serializer.Execute(transaction)
+                        let data = queryResult.data || [];
+                        let count = queryResult.count || 0;
+                        ws.send(JSON.stringify({ type: "initialdata", data, count }));
                     }
                     ws.on("close", (code) => {
                         if (queryRef) {
@@ -237,10 +190,7 @@ export class LenDB {
             //the server must respond with client when taking request that will match the token
             //suggestion: put client key on the end of the token
             try {
-                res.setHeader(
-                    "Access-Control-Allow-Origin",
-                    req.header("origin")
-                );
+                res.setHeader("Access-Control-Allow-Origin", req.header("origin"));
                 res.setHeader("Access-Control-Allow-Credentials", "true");
                 res.setHeader("Vary", "origin");
                 const payload = await req.json();
@@ -249,62 +199,39 @@ export class LenDB {
                         if (payload.type == "register") {
                             delete payload.type;
                             let result = await this.auth.Register(payload);
-                            res.cookie(
-                                "lenDB_token",
-                                result.token,
-                                Infinity,
-                                {
-                                    httpOnly: true,
-                                }
-                            );
+                            res.cookie("lenDB_token", result.token, Infinity, {
+                                httpOnly: true,
+                            });
                             const { data, client_key } = result;
                             res.json({ data, client_key });
                         } else if (payload.type == "login") {
-                            let result = await this.auth.Login(
-                                payload.username,
-                                payload.password
-                            );
-                            res.cookie(
-                                "lenDB_token",
-                                result.token,
-                                Infinity,
-                                {
-                                    httpOnly: true,
-                                }
-                            );
+                            let result = await this.auth.Login(payload.username, payload.password);
+                            res.cookie("lenDB_token", result.token, Infinity, {
+                                httpOnly: true,
+                            });
                             const { data, client_key } = result;
                             res.json({ data, client_key });
                         } else if (payload.type == "logout") {
                             if ("lenDB_token" in req?.cookies) {
-                                await this.auth.Logout(
-                                    req.cookies["lenDB_token"]
-                                );
+                                await this.auth.Logout(req.cookies["lenDB_token"]);
                             }
                             res.removeCookie("lenDB_token");
                             res.json({ message: "Logged out succesfully" });
-                        } else if (payload.type == "authenticate_ws"){
+                        } else if (payload.type == "authenticate_ws") {
                             let token: any = req.cookies["lenDB_token"];
-                            if(!token){
-                                res.json({public: true})
-                            }else{
-                                let result = await this.auth.AuthenticateWS(token)
-                                res.json({key: result.key})
+                            if (!token) {
+                                res.json({ public: true });
+                            } else {
+                                let result = await this.auth.AuthenticateWS(token);
+                                res.json({ key: result.key });
                             }
-                        }
-                         else if (payload.type == "authenticate") {
+                        } else if (payload.type == "authenticate") {
                             let token: any = req.cookies["lenDB_token"];
                             if (token) {
-                                let result = await this.auth.Authenticate(
-                                    token
-                                );
-                                res.cookie(
-                                    "lenDB_token",
-                                    result.token,
-                                    Infinity,
-                                    {
-                                        httpOnly: true,
-                                    }
-                                );
+                                let result = await this.auth.Authenticate(token);
+                                res.cookie("lenDB_token", result.token, Infinity, {
+                                    httpOnly: true,
+                                });
                                 const { client_key, data } = result;
                                 res.json({ client_key, data });
                             } else {
@@ -322,7 +249,7 @@ export class LenDB {
                 }
             } catch (error) {
                 res.status(403);
-                res.json({message: error})
+                res.json({ message: error });
             }
         });
 
@@ -335,8 +262,7 @@ export class LenDB {
             return res.type(file.extension).send(file.buffer);
         });
 
-        this.Server.ws("/lenDB_LiveObject", async (ws)=>{
-        })
+        this.Server.ws("/lenDB_LiveObject", async (ws) => {});
 
         this.Server.get("/lenDB_upload/:key", async (req, res) => {
             res.setHeader("Access-Control-Allow-Origin", "*");
@@ -366,7 +292,10 @@ export class LenDB {
             this.initialize();
             await this.acebase.ready();
             await this.acebase.indexes.create("__uploads__", "key");
-            await this.acebase.indexes.create("__tokens__","key",{type: 'fulltext',config: {maxLength: 100000000}})
+            await this.acebase.indexes.create("__tokens__", "key", {
+                type: "fulltext",
+                config: { maxLength: Infinity },
+            });
             this.Serializer = new Serializer(
                 this.acebase,
                 this.emitter,
@@ -378,9 +307,6 @@ export class LenDB {
             );
             let status = await this.Server.listen(port, host);
             console.log(`Server is running at ${host}:${port}`);
-            this.emitter.on("setLiveQueryRefference", (query) => {
-                this.liveQueryRefferences.push(query);
-            });
             return Promise.resolve(status);
         } catch (error) {
             return Promise.reject(error);
