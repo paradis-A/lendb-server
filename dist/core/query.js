@@ -264,7 +264,6 @@ class LenQuery {
                 await this.createListener(clone);
             }
             else {
-                __classPrivateFieldSet(this, _LenQuery_liveRef, this.serializer.applyFilters(clone, __classPrivateFieldGet(this, _LenQuery_acebase, "f").query(clone.ref)), "f");
                 let res = await this.serializer.Execute(clone);
                 let tempData = res?.data;
                 if (tempData && Array.isArray(tempData)) {
@@ -282,6 +281,8 @@ class LenQuery {
     }
     async createListener(transaction) {
         try {
+            this.unsubscribe();
+            __classPrivateFieldSet(this, _LenQuery_liveRef, this.serializer.applyFilters(transaction, __classPrivateFieldGet(this, _LenQuery_acebase, "f").query(transaction.ref)), "f");
             __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("add", (rqe) => {
                 this.serializer.LivePayload(transaction, rqe).then((result) => {
                     this.listener.getEvent("add")(result);
@@ -289,12 +290,12 @@ class LenQuery {
             });
             __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("change", (rqe) => {
                 this.serializer.LivePayload(transaction, rqe).then((result) => {
-                    this.listener.getEvent("add")(result);
+                    this.listener.getEvent("update")(result);
                 });
             });
-            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("change", (rqe) => {
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("remove", (rqe) => {
                 this.serializer.LivePayload(transaction, rqe).then((result) => {
-                    this.listener.getEvent("add")(result);
+                    this.listener.getEvent("destroy")(result);
                 });
             });
             await __classPrivateFieldGet(this, _LenQuery_liveRef, "f").find();
@@ -307,7 +308,14 @@ class LenQuery {
             return Promise.reject(error);
         }
     }
-    unsubscribe() { }
+    unsubscribe() {
+        if (__classPrivateFieldGet(this, _LenQuery_liveRef, "f")) {
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").off("add", () => { });
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").off("change", () => { });
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").off("remove", () => { });
+            __classPrivateFieldSet(this, _LenQuery_liveRef, null, "f");
+        }
+    }
 }
 exports.default = LenQuery;
 _LenQuery_live = new WeakMap(), _LenQuery_liveRef = new WeakMap(), _LenQuery_acebase = new WeakMap();

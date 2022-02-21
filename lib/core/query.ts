@@ -276,7 +276,7 @@ export default class LenQuery {
             if (this.#live && this.listener.callbacks.length) {
                 await this.createListener(clone);
             } else {
-                this.#liveRef = this.serializer.applyFilters(clone, this.#acebase.query(clone.ref));
+               
                 let res = await this.serializer.Execute(clone);
                 let tempData = res?.data;
                 if (tempData && Array.isArray(tempData)) {
@@ -294,6 +294,8 @@ export default class LenQuery {
 
     protected async createListener(transaction) {
         try {
+            this.unsubscribe()
+            this.#liveRef = this.serializer.applyFilters(transaction, this.#acebase.query(transaction.ref));
             this.#liveRef.on("add", (rqe) => {
                 this.serializer.LivePayload(transaction, rqe).then((result) => {
                     this.listener.getEvent("add")(result);
@@ -301,12 +303,12 @@ export default class LenQuery {
             });
             this.#liveRef.on("change", (rqe) => {
                 this.serializer.LivePayload(transaction, rqe).then((result) => {
-                    this.listener.getEvent("add")(result);
+                    this.listener.getEvent("update")(result);
                 });
             });
-            this.#liveRef.on("change", (rqe) => {
+            this.#liveRef.on("remove", (rqe) => {
                 this.serializer.LivePayload(transaction, rqe).then((result) => {
-                    this.listener.getEvent("add")(result);
+                    this.listener.getEvent("destroy")(result);
                 });
             });
             await this.#liveRef.find();
@@ -318,7 +320,14 @@ export default class LenQuery {
             return Promise.reject(error);
         }
     }
-    unsubscribe() {}
+    unsubscribe() {
+        if(this.#liveRef){
+            this.#liveRef.off("add",()=>{})
+            this.#liveRef.off("change",()=>{})
+            this.#liveRef.off("remove",()=>{})
+            this.#liveRef = null
+        }
+    }
 }
 
 class Aggregate {
