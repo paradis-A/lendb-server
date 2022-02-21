@@ -7,11 +7,10 @@ import { AceBase } from "acebase";
 import { iRefHook, iAuthHook, iAuthEvent, iRefEvent } from "./hook";
 import type Emittery from "emittery";
 import { DataReferenceQuery } from "acebase-core";
-import { cloneDeep, isDate, isNumber, isObject, } from "lodash";
+import { cloneDeep, isDate, isNumber, isObject, orderBy, unionBy, unionWith } from "lodash";
 import Auth, { Account } from "./auth";
 import type { ObjectLink } from "./";
 import { RealtimeQueryEvent } from "acebase-core/types/data-reference";
-const SEARCH_FIELD = "__search_field__";
 export default class Serializer {
     protected acebase: AceBase;
     protected emitter: Emittery;
@@ -371,9 +370,6 @@ export default class Serializer {
             }
             if (exists) data.updated_at = new Date(Date.now());
             else data.created_at = new Date(Date.now());
-            if (SEARCH_FIELD in data) {
-                delete data[SEARCH_FIELD];
-            }
             for (const entry of Object.entries(data)) {
                 //@ts-ignore
                 if (isDate(entry[0])) {
@@ -382,8 +378,6 @@ export default class Serializer {
                 }
             }
             this.ProcessLink(refference, key, data);
-            let searchField = this.generateSearchString(data);
-            if (searchField) data[SEARCH_FIELD] = searchField;
             await this.ProcessLink(ref, key, data);
             if (exists) instance.update(data);
             else instance.set(data);
@@ -397,7 +391,6 @@ export default class Serializer {
                     this.acebase.indexes.create(ref, "key");
                 }
             }
-            delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
                 await this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
@@ -551,10 +544,6 @@ export default class Serializer {
                         this.acebase.indexes.create(path, field, {
                             type: "array",
                         });
-                    } else if (field == SEARCH_FIELD) {
-                        this.acebase.indexes.create(path, field, {
-                            type: "fulltext",
-                        });
                     } else {
                         this.acebase.indexes.create(path, field);
                     }
@@ -588,7 +577,7 @@ export default class Serializer {
         server: { req?: Request; res?: Response }
     ): Promise<{ data: any[]; count: number }> {
         try {
-            const { ref, hook, live, subscriptionKey } = transaction;
+            const { ref, hook } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
                 return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
@@ -602,7 +591,7 @@ export default class Serializer {
                 }
             }
             queryRef = this.applyFilters(clone, queryRef);
-            const { aggregates,  limit,  exclusion, inclusion} = clone;
+            const { aggregates, limit, exclusion, inclusion } = clone;
             let count = 0;
             let data: any[] = [];
             if (isObject(aggregates) && !isDate(aggregates)) {
@@ -725,6 +714,7 @@ export default class Serializer {
                             }
                         }
                     });
+
                     for (const undefinedRef of Object.entries(undefinedRefs)) {
                         let keySplit = undefinedRef[0].split(".");
                         const group = keySplit[0];
@@ -743,7 +733,6 @@ export default class Serializer {
                         if (op == "AVG") groups[group][alias] = avg;
                         if (op == "COUNT") groups[group][alias] = count;
                     }
-
                     count = Object.entries(groups).length;
                     data = Object.entries(groups).map((g) => {
                         //@ts-ignore
@@ -764,8 +753,10 @@ export default class Serializer {
                     } else if (inclusion?.length) {
                         data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
                     }
+                } else {
+                    data = (await queryRef.get()).map((snap) => snap.val());
                 }
-                data = (await queryRef.get()).map((snap) => snap.val());
+                queryRef.take(Infinity);
                 count = await queryRef.count();
             }
             //! todo return decorated data
@@ -786,6 +777,90 @@ export default class Serializer {
         }
     }
 
+    async compound(transaction) {
+        try {
+            let queryResults = [];
+            let count = 0;
+            for (const filter of transaction.compoundFilter) {
+                const { exclusion, inclusion } = transaction;
+                let tempQuery = this.acebase.query(transaction.ref);
+                tempQuery = this.applyFilters(transaction, tempQuery);
+                tempQuery.filter(filter[0], filter[1], filter[2]);
+                if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
+                    if (exclusion?.length && inclusion?.length) {
+                        if (queryResults.length) {
+                            unionWith(
+                                (
+                                    await tempQuery.get({
+                                        exclude: exclusion,
+                                        include: inclusion,
+                                    })
+                                ).map((snap) => snap.val()),
+                                queryResults,
+                                (a, b) => a.key == b.key
+                            );
+                        } else {
+                            queryResults.push(
+                                ...(
+                                    await tempQuery.get({
+                                        exclude: exclusion,
+                                        include: inclusion,
+                                    })
+                                ).map((snap) => snap.val())
+                            );
+                        }
+                    } else if (exclusion?.length) {
+                        if (queryResults.length) {
+                            unionWith(
+                                (await tempQuery.get({ exclude: exclusion })).map((snap) => snap.val()),
+                                queryResults,
+                                (a, b) => a.key == b.key
+                            );
+                        } else {
+                            queryResults.push(
+                                ...(await tempQuery.get({ exclude: exclusion })).map((snap) => snap.val())
+                            );
+                        }
+                    } else if (inclusion?.length) {
+                        if (queryResults.length) {
+                            unionWith(
+                                (await tempQuery.get({ include: inclusion })).map((snap) => snap.val()),
+                                queryResults,
+                                (a, b) => a.key == b.key
+                            );
+                        } else {
+                            queryResults.push(
+                                ...(await tempQuery.get({ include: inclusion })).map((snap) => snap.val())
+                            );
+                        }
+                    }
+                } else {
+                    if (queryResults.length) {
+                        unionWith(
+                            (await tempQuery.get()).map((snap) => snap.val()),
+                            queryResults,
+                            (a, b) => a.key == b.key
+                        );
+                    } else {
+                        queryResults.push((await tempQuery.get()).map((snap) => snap.val()));
+                    }
+                }
+                if (transaction?.sorts?.length) {
+                    const sortingKeys = transaction.sorts.map((t) => t[0]);
+                    const sortingValues = transaction.sorts.map((t) => (t[1] ? "asc" : "desc"));
+                    orderBy(queryResults, sortingKeys, sortingValues);
+                } else {
+                    orderBy(queryResults, ["rev_ticks", "asc"]);
+                }
+                tempQuery.take(Infinity);
+                count = await tempQuery.count();
+            }
+            return Promise.resolve({ data: queryResults, count });
+        } catch (error) {
+            return Promise.reject(error);
+        }
+    }
+
     async LivePayload(
         transaction: {
             skip: number;
@@ -796,7 +871,6 @@ export default class Serializer {
             sort: any[];
             filters: any[];
             ref: string;
-            searchString: string;
         },
         eventEmitted: RealtimeQueryEvent
     ) {

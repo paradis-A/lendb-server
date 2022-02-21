@@ -1,12 +1,11 @@
 export default class iLenQueryFilter {
-    filters: any[];
-    ref: string;
+    filters: any;
+    sorts: {
+        [any: string]: "ASC" | "DESC" | null;
+    };
     skip: number;
     limit: number;
     page: number;
-    exclusion: string[];
-    inclusion: string[];
-    sorts: any[];
     like(field: string, value: any, pattern: "both" | "left" | "right"): this;
     notLike(field: string, value: string, pattern: "both" | "left" | "right"): this;
     gt(field: string, value: any): this;
@@ -25,7 +24,4 @@ export default class iLenQueryFilter {
     notHas(field: string, value: any[]): this;
     contains(field: string, value: any[]): this;
     notContains(field: string, value: any[]): this;
-    sort(field: string, asc?: boolean): this;
-    exclude(fields: string[]): this;
-    include(fields: string[]): this;
 }

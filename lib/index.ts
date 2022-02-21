@@ -86,7 +86,7 @@ export class LenDB {
                 res.end("Error here");
             }
         });
-
+        
         this.Server.ws("/lenDB", async (ws) => {
             try {
                 let subscriptionKey = null;
@@ -102,7 +102,6 @@ export class LenDB {
                         sort: any[];
                         filters: any[];
                         ref: string;
-                        searchString: string;
                     };
                     subscriptionKey = payload?.subscriptionKey;
                     transaction = payload?.query;

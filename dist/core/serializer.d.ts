@@ -53,6 +53,10 @@ export default class Serializer {
         data: any[];
         count: number;
     }>;
+    compound(transaction: any): Promise<{
+        data: any[];
+        count: number;
+    }>;
     LivePayload(transaction: {
         skip: number;
         limit: number;
@@ -62,7 +66,6 @@ export default class Serializer {
         sort: any[];
         filters: any[];
         ref: string;
-        searchString: string;
     }, eventEmitted: RealtimeQueryEvent): Promise<{
         newData: any;
         count: number;

@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
-const SEARCH_FIELD = "__search_field__";
 class Serializer {
     // protected Queue: { [ref: string]: Queue };
     constructor(acebaseInstance, emitteryInstance, refHook, authHook, auth, link, publisher) {
@@ -350,9 +349,6 @@ class Serializer {
                 data.updated_at = new Date(Date.now());
             else
                 data.created_at = new Date(Date.now());
-            if (SEARCH_FIELD in data) {
-                delete data[SEARCH_FIELD];
-            }
             for (const entry of Object.entries(data)) {
                 //@ts-ignore
                 if ((0, lodash_1.isDate)(entry[0])) {
@@ -361,9 +357,6 @@ class Serializer {
                 }
             }
             this.ProcessLink(refference, key, data);
-            let searchField = this.generateSearchString(data);
-            if (searchField)
-                data[SEARCH_FIELD] = searchField;
             await this.ProcessLink(ref, key, data);
             if (exists)
                 instance.update(data);
@@ -377,7 +370,6 @@ class Serializer {
                     this.acebase.indexes.create(ref, "key");
                 }
             }
-            delete data[searchField];
             let returnData = (await instance.get()).val();
             if (executeHook) {
                 await this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
@@ -530,11 +522,6 @@ class Serializer {
                             type: "array",
                         });
                     }
-                    else if (field == SEARCH_FIELD) {
-                        this.acebase.indexes.create(path, field, {
-                            type: "fulltext",
-                        });
-                    }
                     else {
                         this.acebase.indexes.create(path, field);
                     }
@@ -564,7 +551,7 @@ class Serializer {
     }
     async Query(transaction, server) {
         try {
-            const { ref, hook, live, subscriptionKey } = transaction;
+            const { ref, hook } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
                 return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
@@ -756,7 +743,10 @@ class Serializer {
                         data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
                     }
                 }
-                data = (await queryRef.get()).map((snap) => snap.val());
+                else {
+                    data = (await queryRef.get()).map((snap) => snap.val());
+                }
+                queryRef.take(Infinity);
                 count = await queryRef.count();
             }
             //! todo return decorated data
@@ -775,6 +765,72 @@ class Serializer {
             if (error?.message.startsWith("Error: This wildcard path query on"))
                 return Promise.resolve({ data: [], count: 0 });
             throw new Error(error);
+        }
+    }
+    async compound(transaction) {
+        try {
+            let queryResults = [];
+            let count = 0;
+            for (const filter of transaction.compoundFilter) {
+                const { exclusion, inclusion } = transaction;
+                let tempQuery = this.acebase.query(transaction.ref);
+                tempQuery = this.applyFilters(transaction, tempQuery);
+                tempQuery.filter(filter[0], filter[1], filter[2]);
+                if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
+                    if (exclusion?.length && inclusion?.length) {
+                        if (queryResults.length) {
+                            (0, lodash_1.unionWith)((await tempQuery.get({
+                                exclude: exclusion,
+                                include: inclusion,
+                            })).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
+                        }
+                        else {
+                            queryResults.push(...(await tempQuery.get({
+                                exclude: exclusion,
+                                include: inclusion,
+                            })).map((snap) => snap.val()));
+                        }
+                    }
+                    else if (exclusion?.length) {
+                        if (queryResults.length) {
+                            (0, lodash_1.unionWith)((await tempQuery.get({ exclude: exclusion })).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
+                        }
+                        else {
+                            queryResults.push(...(await tempQuery.get({ exclude: exclusion })).map((snap) => snap.val()));
+                        }
+                    }
+                    else if (inclusion?.length) {
+                        if (queryResults.length) {
+                            (0, lodash_1.unionWith)((await tempQuery.get({ include: inclusion })).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
+                        }
+                        else {
+                            queryResults.push(...(await tempQuery.get({ include: inclusion })).map((snap) => snap.val()));
+                        }
+                    }
+                }
+                else {
+                    if (queryResults.length) {
+                        (0, lodash_1.unionWith)((await tempQuery.get()).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
+                    }
+                    else {
+                        queryResults.push((await tempQuery.get()).map((snap) => snap.val()));
+                    }
+                }
+                if (transaction?.sorts?.length) {
+                    const sortingKeys = transaction.sorts.map((t) => t[0]);
+                    const sortingValues = transaction.sorts.map((t) => (t[1] ? "asc" : "desc"));
+                    (0, lodash_1.orderBy)(queryResults, sortingKeys, sortingValues);
+                }
+                else {
+                    (0, lodash_1.orderBy)(queryResults, ["rev_ticks", "asc"]);
+                }
+                tempQuery.take(Infinity);
+                count = await tempQuery.count();
+            }
+            return Promise.resolve({ data: queryResults, count });
+        }
+        catch (error) {
+            return Promise.reject(error);
         }
     }
     async LivePayload(transaction, eventEmitted) {
