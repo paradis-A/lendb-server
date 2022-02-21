@@ -777,63 +777,51 @@ class Serializer {
     async compound(transaction) {
         try {
             let queryResults = [];
+            let keys = [];
             let count = 0;
             for (const filter of transaction.compoundFilter) {
-                const { exclusion, inclusion } = transaction;
                 let tempQuery = this.acebase.query(transaction.ref);
                 tempQuery = this.applyFilters(transaction, tempQuery);
+                let resultkeys = queryResults.map(qr => qr.key);
+                if (queryResults.length && resultkeys.length) {
+                    tempQuery.filter("key", "!in", resultkeys);
+                }
                 tempQuery.filter(filter[0], filter[1], filter[2]);
-                if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
-                    if (exclusion?.length && inclusion?.length) {
-                        if (queryResults.length) {
-                            (0, lodash_1.unionWith)((await tempQuery.get({
-                                exclude: exclusion,
-                                include: inclusion,
-                            })).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
-                        }
-                        else {
-                            queryResults.push(...(await tempQuery.get({
-                                exclude: exclusion,
-                                include: inclusion,
-                            })).map((snap) => snap.val()));
-                        }
-                    }
-                    else if (exclusion?.length) {
-                        if (queryResults.length) {
-                            (0, lodash_1.unionWith)((await tempQuery.get({ exclude: exclusion })).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
-                        }
-                        else {
-                            queryResults.push(...(await tempQuery.get({ exclude: exclusion })).map((snap) => snap.val()));
-                        }
-                    }
-                    else if (inclusion?.length) {
-                        if (queryResults.length) {
-                            (0, lodash_1.unionWith)((await tempQuery.get({ include: inclusion })).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
-                        }
-                        else {
-                            queryResults.push(...(await tempQuery.get({ include: inclusion })).map((snap) => snap.val()));
-                        }
-                    }
-                }
-                else {
-                    if (queryResults.length) {
-                        (0, lodash_1.unionWith)((await tempQuery.get()).map((snap) => snap.val()), queryResults, (a, b) => a.key == b.key);
-                    }
-                    else {
-                        queryResults.push((await tempQuery.get()).map((snap) => snap.val()));
-                    }
-                }
-                if (transaction?.sorts?.length) {
-                    const sortingKeys = transaction.sorts.map((t) => t[0]);
-                    const sortingValues = transaction.sorts.map((t) => (t[1] ? "asc" : "desc"));
-                    (0, lodash_1.orderBy)(queryResults, sortingKeys, sortingValues);
-                }
-                else {
-                    (0, lodash_1.orderBy)(queryResults, ["rev_ticks", "asc"]);
-                }
-                tempQuery.take(Infinity);
-                count = await tempQuery.count();
+                keys = (0, lodash_1.uniq)([...keys, ...(await tempQuery.find()).map(dr => dr.key)]);
+                count += await tempQuery.take(Infinity).count();
             }
+            const { exclusion, inclusion } = transaction;
+            if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
+                if (exclusion?.length && inclusion?.length) {
+                    queryResults = (await Promise.all(keys.map(key => {
+                        return this.acebase.ref(transaction.ref + "/" + key).get({ include: inclusion, exclude: exclusion });
+                    }))).map(ds => ds.val());
+                }
+                else if (exclusion?.length) {
+                    queryResults = (await Promise.all(keys.map(key => {
+                        return this.acebase.ref(transaction.ref + "/" + key).get({ exclude: exclusion });
+                    }))).map(ds => ds.val());
+                }
+                else if (inclusion?.length) {
+                    queryResults = (await Promise.all(keys.map(key => {
+                        return this.acebase.ref(transaction.ref + "/" + key).get({ include: inclusion });
+                    }))).map(ds => ds.val());
+                }
+            }
+            else {
+                queryResults = (await Promise.all(keys.map(key => {
+                    return this.acebase.ref(transaction.ref + "/" + key).get();
+                }))).map(ds => ds.val());
+            }
+            if (transaction?.sorts?.length) {
+                const sortingKeys = transaction.sorts.map((t) => t[0]);
+                const sortingValues = transaction.sorts.map((t) => (t[1] ? "asc" : "desc"));
+                queryResults = (0, lodash_1.orderBy)(queryResults, sortingKeys, sortingValues);
+            }
+            else {
+                queryResults = (0, lodash_1.orderBy)(queryResults, ["rev_ticks", "asc"]);
+            }
+            queryResults = queryResults.slice(0, transaction?.limit);
             return Promise.resolve({ data: queryResults, count });
         }
         catch (error) {

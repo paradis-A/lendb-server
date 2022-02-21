@@ -276,7 +276,6 @@ export default class LenQuery {
             if (this.#live && this.listener.callbacks.length) {
                 await this.createListener(clone);
             } else {
-               
                 let res = await this.serializer.Execute(clone);
                 let tempData = res?.data;
                 if (tempData && Array.isArray(tempData)) {
