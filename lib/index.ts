@@ -7,10 +7,7 @@ import Emittery from "emittery";
 //@ts-ignore
 import LiveDirectory from "live-directory";
 import fs from "graceful-fs";
-import cuid from "cuid";
 import { DataReferenceQuery } from "acebase-core";
-import pWaitFor from "./extras/pwaitfor";
-import { isDate, isObject } from "lodash";
 export class LenDB {
     protected Serializer: Serializer;
     readonly acebase: AceBase;
@@ -56,7 +53,7 @@ export class LenDB {
     }
 
     Query(ref: string) {
-        return new LenQuery(ref, this.emitter, this.Serializer);
+        return new LenQuery(ref, this.emitter, this.Serializer,this.acebase);
     }
 
     Object(ref: string, singularOrKey: boolean | string = false) {

@@ -37,7 +37,7 @@ class LenDB {
         });
     }
     Query(ref) {
-        return new core_1.LenQuery(ref, this.emitter, this.Serializer);
+        return new core_1.LenQuery(ref, this.emitter, this.Serializer, this.acebase);
     }
     Object(ref, singularOrKey = false) {
         return new core_1.LenObject(ref, singularOrKey, this.Serializer);

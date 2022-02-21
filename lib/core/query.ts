@@ -4,6 +4,7 @@ import { cloneDeep, isObject } from "lodash";
 import { Serializer } from "./";
 import Normalize from "./normalize";
 import { AceBase } from "acebase";
+import { DataReferenceQuery } from "acebase-core";
 export default class LenQuery {
     protected ref: string;
     filters: any = {};
@@ -11,6 +12,10 @@ export default class LenQuery {
     skip: number = 0;
     limit: number = 100;
     page: number = 0;
+    listener: iLiveQuery;
+    #live = false;
+    #liveRef: DataReferenceQuery;
+    #acebase: AceBase;
     protected aggregates: Aggregate;
     protected operation: string;
     protected exclusion: string[] = [];
@@ -20,17 +25,13 @@ export default class LenQuery {
     protected emitter: Emittery;
     protected unsubscribePrevious: Function = null;
     protected hook: boolean;
-    constructor(
-        ref: string,
-        emitter: Emittery,
-        serializer: Serializer,
-        acebase?: AceBase
-    ) {
+    constructor(ref: string, emitter: Emittery, serializer: Serializer, acebase: AceBase) {
         this.serializer = serializer;
         this.emitter = emitter;
         this.ref = ref;
         this.operation = "query";
         this.hook = false;
+        this.#acebase = acebase;
     }
 
     like(field: string, value: any, pattern: "both" | "left" | "right") {
@@ -147,10 +148,18 @@ export default class LenQuery {
         return this;
     }
 
+    on(cb: (event: iLiveQuery) => void) {
+        let events = new iLiveQuery();
+        cb(events);
+        this.listener = events;
+        this.#live = true;
+    }
+
     protected stripNonQuery(clone: this) {
         delete clone.serializer;
         delete clone.emitter;
         delete clone.unsubscribePrevious;
+        delete clone.listener;
         return clone;
     }
 
@@ -163,7 +172,7 @@ export default class LenQuery {
             .join("/");
     }
 
-    aggregate(groupBy:string, cb: (ops: Aggregate) => void | Aggregate) {
+    aggregate(groupBy: string, cb: (ops: Aggregate) => void | Aggregate) {
         this.aggregates = new Aggregate(groupBy);
         cb(this.aggregates);
         return this;
@@ -175,13 +184,8 @@ export default class LenQuery {
         }
     ): Promise<{ data: any[]; count: number }> {
         try {
-            if (
-                this.ref.includes("__users__") ||
-                this.ref.includes("__tokens__")
-            ) {
-                return Promise.reject(
-                    "Error: cannot access secured refferences use  instance.User() instead."
-                );
+            if (this.ref.includes("__users__") || this.ref.includes("__tokens__")) {
+                return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
             const { page, limit, hook } = options;
             this.hook = hook;
@@ -196,12 +200,8 @@ export default class LenQuery {
                     delete clone.searchString;
                 }
             }
-            
-            if (
-                clone.filters &&
-                isObject(clone.filters) &&
-                Object.entries(clone.filters).length
-            ) {
+
+            if (clone.filters && isObject(clone.filters) && Object.entries(clone.filters).length) {
                 let tempFilters = [];
                 for (const entry of Object.entries(clone.filters)) {
                     let key = entry[0];
@@ -215,10 +215,8 @@ export default class LenQuery {
                         let filter = key.substring(start + 1, end);
                         let field = key.substring(0, start);
                         if (operatorBasis.includes(filter)) {
-                            if (filter == "in" && !Array.isArray(value))
-                                throw new Error("Invalid filter");
-                            if (filter == "between" && !Array.isArray(value))
-                                throw new Error("Invalid filter");
+                            if (filter == "in" && !Array.isArray(value)) throw new Error("Invalid filter");
+                            if (filter == "between" && !Array.isArray(value)) throw new Error("Invalid filter");
                             const alphaOperators = {
                                 eq: "==",
                                 neq: "!=",
@@ -228,18 +226,12 @@ export default class LenQuery {
                                 lte: "<=",
                             };
                             if (filter.startsWith("not")) {
-                                let transformedFilter = Object.keys(
-                                    alphaOperators
-                                ).includes(filter.substring(2).toLowerCase())
-                                    ? alphaOperators[
-                                          filter.substring(2).toLowerCase()
-                                      ]
+                                let transformedFilter = Object.keys(alphaOperators).includes(
+                                    filter.substring(2).toLowerCase()
+                                )
+                                    ? alphaOperators[filter.substring(2).toLowerCase()]
                                     : filter.substring(2).toLowerCase();
-                                tempFilters.push([
-                                    field,
-                                    transformedFilter,
-                                    value,
-                                ]);
+                                tempFilters.push([field, transformedFilter, value]);
                             } else {
                                 tempFilters.push([field, filter, value]);
                             }
@@ -265,11 +257,7 @@ export default class LenQuery {
                 //@ts-ignore
                 clone.aggregates = { groupBy, list };
             }
-            if (
-                clone.sorts &&
-                isObject(clone.sorts) &&
-                Object.entries(clone.sorts).length
-            ) {
+            if (clone.sorts && isObject(clone.sorts) && Object.entries(clone.sorts).length) {
                 let tempSorts = [];
                 for (const entry of Object.entries(clone.sorts)) {
                     let key = entry[0];
@@ -285,22 +273,52 @@ export default class LenQuery {
             }
             if (page && typeof page == "number") clone.page = page;
             if (limit && typeof limit == "number") clone.limit = limit;
-            let res = await this.serializer.Execute(clone);
-            let tempData = res?.data;
-            if (tempData && Array.isArray(tempData)) {
-                tempData = tempData.map((data) => {
-                    return Normalize(data);
-                });
+            if (this.#live && this.listener.callbacks.length) {
+                await this.createListener(clone);
+            } else {
+                this.#liveRef = this.serializer.applyFilters(clone, this.#acebase.query(clone.ref));
+                let res = await this.serializer.Execute(clone);
+                let tempData = res?.data;
+                if (tempData && Array.isArray(tempData)) {
+                    tempData = tempData.map((data) => {
+                        return Normalize(data);
+                    });
+                }
+                res.data = tempData;
+                return Promise.resolve(res);
             }
-            res.data = tempData;
-            return Promise.resolve(res);
         } catch (error) {
-            // if(error?.message.startsWith("Error: This wildcard path query")){
-            //     return Promise.resolve({data: [], count: []})
-            // }
             return Promise.reject(error);
         }
     }
+
+    protected async createListener(transaction) {
+        try {
+            this.#liveRef.on("add", (rqe) => {
+                this.serializer.LivePayload(transaction, rqe).then((result) => {
+                    this.listener.getEvent("add")(result);
+                });
+            });
+            this.#liveRef.on("change", (rqe) => {
+                this.serializer.LivePayload(transaction, rqe).then((result) => {
+                    this.listener.getEvent("add")(result);
+                });
+            });
+            this.#liveRef.on("change", (rqe) => {
+                this.serializer.LivePayload(transaction, rqe).then((result) => {
+                    this.listener.getEvent("add")(result);
+                });
+            });
+            await this.#liveRef.find();
+            let res = await this.serializer.Execute(transaction);
+            //turns off when execute called again and if on() not called before execute this function will not be executed
+            this.#live = false;
+            return Promise.resolve({ data: res.data, cout: res.count });
+        } catch (error) {
+            return Promise.reject(error);
+        }
+    }
+    unsubscribe() {}
 }
 
 class Aggregate {
@@ -314,28 +332,28 @@ class Aggregate {
         this.groupBy = groupBy;
     }
 
-    sum(field: string,alias: string) {
-        this.list.push({ field, operation: "SUM", alias});
+    sum(field: string, alias: string) {
+        this.list.push({ field, operation: "SUM", alias });
         return this;
     }
 
-    count(field: string,alias: string) {
-        this.list.push({ field, operation: "COUNT",alias });
+    count(field: string, alias: string) {
+        this.list.push({ field, operation: "COUNT", alias });
         return this;
     }
 
-    min(field: string,alias: string) {
-        this.list.push({ field, operation: "MIN",alias });
+    min(field: string, alias: string) {
+        this.list.push({ field, operation: "MIN", alias });
         return this;
     }
 
-    max(field: string,alias: string) {
-        this.list.push({ field, operation: "MAX",alias });
+    max(field: string, alias: string) {
+        this.list.push({ field, operation: "MAX", alias });
         return this;
     }
-    
-    avg(field: string,alias: string) {
-        this.list.push({ field, operation: "AVG",alias });
+
+    avg(field: string, alias: string) {
+        this.list.push({ field, operation: "AVG", alias });
         return this;
     }
 }

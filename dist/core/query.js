@@ -1,7 +1,19 @@
 "use strict";
+var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
+    if (kind === "m") throw new TypeError("Private method is not writable");
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+    return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
+};
+var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+    return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _LenQuery_live, _LenQuery_liveRef, _LenQuery_acebase;
 Object.defineProperty(exports, "__esModule", { value: true });
 const cuid_1 = __importDefault(require("cuid"));
 const lodash_1 = require("lodash");
@@ -13,6 +25,9 @@ class LenQuery {
         this.skip = 0;
         this.limit = 100;
         this.page = 0;
+        _LenQuery_live.set(this, false);
+        _LenQuery_liveRef.set(this, void 0);
+        _LenQuery_acebase.set(this, void 0);
         this.exclusion = [];
         this.inclusion = [];
         this.unsubscribePrevious = null;
@@ -21,6 +36,7 @@ class LenQuery {
         this.ref = ref;
         this.operation = "query";
         this.hook = false;
+        __classPrivateFieldSet(this, _LenQuery_acebase, acebase, "f");
     }
     like(field, value, pattern) {
         let val = "*" + value + "*";
@@ -118,10 +134,17 @@ class LenQuery {
         this.searchString = word;
         return this;
     }
+    on(cb) {
+        let events = new iLiveQuery();
+        cb(events);
+        this.listener = events;
+        __classPrivateFieldSet(this, _LenQuery_live, true, "f");
+    }
     stripNonQuery(clone) {
         delete clone.serializer;
         delete clone.emitter;
         delete clone.unsubscribePrevious;
+        delete clone.listener;
         return clone;
     }
     toWildCardPath(ref) {
@@ -141,8 +164,7 @@ class LenQuery {
         hook: false,
     }) {
         try {
-            if (this.ref.includes("__users__") ||
-                this.ref.includes("__tokens__")) {
+            if (this.ref.includes("__users__") || this.ref.includes("__tokens__")) {
                 return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
             const { page, limit, hook } = options;
@@ -158,9 +180,7 @@ class LenQuery {
                     delete clone.searchString;
                 }
             }
-            if (clone.filters &&
-                (0, lodash_1.isObject)(clone.filters) &&
-                Object.entries(clone.filters).length) {
+            if (clone.filters && (0, lodash_1.isObject)(clone.filters) && Object.entries(clone.filters).length) {
                 let tempFilters = [];
                 for (const entry of Object.entries(clone.filters)) {
                     let key = entry[0];
@@ -190,11 +210,7 @@ class LenQuery {
                                 let transformedFilter = Object.keys(alphaOperators).includes(filter.substring(2).toLowerCase())
                                     ? alphaOperators[filter.substring(2).toLowerCase()]
                                     : filter.substring(2).toLowerCase();
-                                tempFilters.push([
-                                    field,
-                                    transformedFilter,
-                                    value,
-                                ]);
+                                tempFilters.push([field, transformedFilter, value]);
                             }
                             else {
                                 tempFilters.push([field, filter, value]);
@@ -225,9 +241,7 @@ class LenQuery {
                 //@ts-ignore
                 clone.aggregates = { groupBy, list };
             }
-            if (clone.sorts &&
-                (0, lodash_1.isObject)(clone.sorts) &&
-                Object.entries(clone.sorts).length) {
+            if (clone.sorts && (0, lodash_1.isObject)(clone.sorts) && Object.entries(clone.sorts).length) {
                 let tempSorts = [];
                 for (const entry of Object.entries(clone.sorts)) {
                     let key = entry[0];
@@ -246,25 +260,57 @@ class LenQuery {
                 clone.page = page;
             if (limit && typeof limit == "number")
                 clone.limit = limit;
-            let res = await this.serializer.Execute(clone);
-            let tempData = res?.data;
-            if (tempData && Array.isArray(tempData)) {
-                tempData = tempData.map((data) => {
-                    return (0, normalize_1.default)(data);
-                });
+            if (__classPrivateFieldGet(this, _LenQuery_live, "f") && this.listener.callbacks.length) {
+                await this.createListener(clone);
             }
-            res.data = tempData;
-            return Promise.resolve(res);
+            else {
+                __classPrivateFieldSet(this, _LenQuery_liveRef, this.serializer.applyFilters(clone, __classPrivateFieldGet(this, _LenQuery_acebase, "f").query(clone.ref)), "f");
+                let res = await this.serializer.Execute(clone);
+                let tempData = res?.data;
+                if (tempData && Array.isArray(tempData)) {
+                    tempData = tempData.map((data) => {
+                        return (0, normalize_1.default)(data);
+                    });
+                }
+                res.data = tempData;
+                return Promise.resolve(res);
+            }
         }
         catch (error) {
-            // if(error?.message.startsWith("Error: This wildcard path query")){
-            //     return Promise.resolve({data: [], count: []})
-            // }
             return Promise.reject(error);
         }
     }
+    async createListener(transaction) {
+        try {
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("add", (rqe) => {
+                this.serializer.LivePayload(transaction, rqe).then((result) => {
+                    this.listener.getEvent("add")(result);
+                });
+            });
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("change", (rqe) => {
+                this.serializer.LivePayload(transaction, rqe).then((result) => {
+                    this.listener.getEvent("add")(result);
+                });
+            });
+            __classPrivateFieldGet(this, _LenQuery_liveRef, "f").on("change", (rqe) => {
+                this.serializer.LivePayload(transaction, rqe).then((result) => {
+                    this.listener.getEvent("add")(result);
+                });
+            });
+            await __classPrivateFieldGet(this, _LenQuery_liveRef, "f").find();
+            let res = await this.serializer.Execute(transaction);
+            //turns off when execute called again and if on() not called before execute this function will not be executed
+            __classPrivateFieldSet(this, _LenQuery_live, false, "f");
+            return Promise.resolve({ data: res.data, cout: res.count });
+        }
+        catch (error) {
+            return Promise.reject(error);
+        }
+    }
+    unsubscribe() { }
 }
 exports.default = LenQuery;
+_LenQuery_live = new WeakMap(), _LenQuery_liveRef = new WeakMap(), _LenQuery_acebase = new WeakMap();
 class Aggregate {
     constructor(groupBy) {
         this.list = [];

@@ -2,6 +2,7 @@ import Emittery from "emittery";
 import { Serializer } from "./";
 import { AceBase } from "acebase";
 export default class LenQuery {
+    #private;
     protected ref: string;
     filters: any;
     sorts: {
@@ -10,6 +11,7 @@ export default class LenQuery {
     skip: number;
     limit: number;
     page: number;
+    listener: iLiveQuery;
     protected aggregates: Aggregate;
     protected operation: string;
     protected exclusion: string[];
@@ -19,7 +21,7 @@ export default class LenQuery {
     protected emitter: Emittery;
     protected unsubscribePrevious: Function;
     protected hook: boolean;
-    constructor(ref: string, emitter: Emittery, serializer: Serializer, acebase?: AceBase);
+    constructor(ref: string, emitter: Emittery, serializer: Serializer, acebase: AceBase);
     like(field: string, value: any, pattern: "both" | "left" | "right"): this;
     notLike(field: string, value: string, pattern: "both" | "left" | "right"): this;
     gt(field: string, value: any): this;
@@ -42,6 +44,7 @@ export default class LenQuery {
     exclude(fields: string[]): void;
     include(fields: string[]): void;
     search(word: string): this;
+    on(cb: (event: iLiveQuery) => void): void;
     protected stripNonQuery(clone: this): this;
     protected toWildCardPath(ref: string): string;
     aggregate(groupBy: string, cb: (ops: Aggregate) => void | Aggregate): this;
@@ -53,6 +56,11 @@ export default class LenQuery {
         data: any[];
         count: number;
     }>;
+    protected createListener(transaction: any): Promise<{
+        data: any;
+        cout: any;
+    }>;
+    unsubscribe(): void;
 }
 declare class Aggregate {
     list: {
@@ -67,5 +75,15 @@ declare class Aggregate {
     min(field: string, alias: string): this;
     max(field: string, alias: string): this;
     avg(field: string, alias: string): this;
+}
+declare class iLiveQuery {
+    callbacks: Function[];
+    protected add: Function;
+    protected update: Function;
+    protected destroy: Function;
+    onAdd(cb: (e: any) => void): void;
+    onUpdate(cb: (e: any) => void): void;
+    onDestroy(cb: (e: any) => void): void;
+    getEvent(event: "add" | "update" | "destroy"): Function;
 }
 export {};
