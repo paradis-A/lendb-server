@@ -740,24 +740,30 @@ export default class Serializer {
                     });
                 }
             } else {
-                if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
-                    if (exclusion?.length && inclusion?.length) {
-                        data = (
-                            await queryRef.get({
-                                exclude: exclusion,
-                                include: inclusion,
-                            })
-                        ).map((snap) => snap.val());
-                    } else if (exclusion?.length) {
-                        data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
-                    } else if (inclusion?.length) {
-                        data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
+                if(transaction?.compoundFilter?.length){
+                    let compoundResult = await this.compound(transaction)
+                    data = compoundResult.data
+                    count = compoundResult.count
+                }else{
+                    if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
+                        if (exclusion?.length && inclusion?.length) {
+                            data = (
+                                await queryRef.get({
+                                    exclude: exclusion,
+                                    include: inclusion,
+                                })
+                            ).map((snap) => snap.val());
+                        } else if (exclusion?.length) {
+                            data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
+                        } else if (inclusion?.length) {
+                            data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
+                        }
+                    } else {
+                        data = (await queryRef.get()).map((snap) => snap.val());
                     }
-                } else {
-                    data = (await queryRef.get()).map((snap) => snap.val());
+                    queryRef.take(Infinity);
+                    count = await queryRef.count();
                 }
-                queryRef.take(Infinity);
-                count = await queryRef.count();
             }
             //! todo return decorated data
             if (executeHook) {
