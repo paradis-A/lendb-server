@@ -252,10 +252,7 @@ class LenDB {
             this.initialize();
             await this.acebase.ready();
             await this.acebase.indexes.create("__uploads__", "key");
-            await this.acebase.indexes.create("__tokens__", "key", {
-                type: "fulltext",
-                config: { maxLength: Infinity },
-            });
+            await this.acebase.indexes.create("__tokens__", "key");
             this.Serializer = new core_1.Serializer(this.acebase, this.emitter, this.hook.refHooks, this.hook.authHooks, null, this.links, this.Server.uws_instance);
             let status = await this.Server.listen(port, host);
             console.log(`Server is running at ${host}:${port}`);

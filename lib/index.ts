@@ -288,10 +288,7 @@ export class LenDB {
             this.initialize();
             await this.acebase.ready();
             await this.acebase.indexes.create("__uploads__", "key");
-            await this.acebase.indexes.create("__tokens__", "key", {
-                type: "fulltext",
-                config: { maxLength: Infinity },
-            });
+            await this.acebase.indexes.create("__tokens__", "key");
             this.Serializer = new Serializer(
                 this.acebase,
                 this.emitter,
