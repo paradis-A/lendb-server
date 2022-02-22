@@ -34,13 +34,11 @@
   },
   "dependencies": {
     "acebase": "^1.15.0",
-    "aggregate-functions": "^1.0.1",
     "chalk": "^5.0.0",
     "cuid": "^2.1.8",
     "dayjs": "^1.10.7",
     "emittery": "^0.10.0",
     "filetypes": "^1.0.2",
-    "fluent-data": "^5.1.0",
     "graceful-fs": "^4.2.8",
     "hyper-express": "^5.5.1",
     "just-group-by": "^2.0.1",
@@ -48,8 +46,6 @@
     "live-directory": "^2.3.2",
     "lodash": "^4.17.21",
     "sharp": "^0.29.3",
-    "timer": "^1.0.1",
-    "timer-node": "^5.0.5",
     "wait": "^0.4.2",
     "wait-file": "^1.0.5"
   }

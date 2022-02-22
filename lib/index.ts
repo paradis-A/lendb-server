@@ -177,7 +177,7 @@ export class LenDB {
                 console.log(error);
             }
         });
-
+        
         this.Server.post("/ping", async (req, res) => {
             res.json({ pong: true });
         });
