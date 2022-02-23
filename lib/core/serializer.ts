@@ -3,7 +3,7 @@ import type Request from "hyper-express/types/components/http/Request";
 import type Response from "hyper-express/types/components/http/Response";
 import type { TemplatedApp } from "../extras/uws";
 import cuid from "cuid";
-import { AceBase } from "acebase";
+import { AceBase, DataReference, DataSnapshot } from "acebase";
 import { iRefHook, iAuthHook, iAuthEvent, iRefEvent } from "./hook";
 import type Emittery from "emittery";
 import { DataReferenceQuery } from "acebase-core";
@@ -345,7 +345,6 @@ export default class Serializer {
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
-            const queue = eventHandles?.queue;
             const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             let data: any = this.getData(Object.assign({}, transaction));
@@ -364,7 +363,6 @@ export default class Serializer {
             if (executeHook) {
                 const hookData = await this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
                 if (hookData && isObject(hookData) && !isDate(hookData)) {
-                    console.log(hookData);
                     Object.assign(data, hookData);
                 }
             }
@@ -377,10 +375,9 @@ export default class Serializer {
                     data[entry[0]] = new Date(entry[1]);
                 }
             }
-            this.ProcessLink(refference, key, data);
-            await this.ProcessLink(ref, key, data);
-            if (exists) instance.update(data);
-            else instance.set(data);
+            data.rev_ticks = Date.now();
+            if (exists) await instance.update(data);
+            else await instance.set(data);
             if (!singular) {
                 let indexes = await this.acebase.indexes.get();
                 if (
@@ -395,16 +392,40 @@ export default class Serializer {
             if (executeHook) {
                 await this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
             }
-
-            //! access level permission when emitting for client side
-            if (executeEmit) {
-                if (exists) {
-                    this.emitter.emit("update:" + hookRef, returnData);
-                } else {
-                    this.emitter.emit("add:" + hookRef, returnData);
-                }
-            }
             return Promise.resolve(returnData);
+        } catch (error) {
+            return Promise.reject(error);
+        }
+    }
+
+    async Propagate(
+        transaction,
+        eventEmitted: RealtimeQueryEvent,
+        data_cache: { key: string; rev_ticks: number }[],
+        count_cache: number
+    ) {
+        try {
+            let index = -1;
+            let count = 0;
+            let data: any[] = [];
+            let newData: any = {};
+            //@ts-ignore
+            delete transaction.subscriptionKey;
+            //@ts-ignore
+            transaction.live = false;
+            transaction.hook = false;
+            let res = await this.Query(transaction, null);
+            if (eventEmitted?.snapshot) {
+                if (Object.keys(eventEmitted.snapshot.val()).length == 1) {
+                    newData = (await eventEmitted.snapshot.ref.get()).val();
+                } else newData = eventEmitted.snapshot.val();
+            } else {
+                newData = (await eventEmitted.ref.get()).val();
+            }
+            index = res.data.findIndex((v) => v == newData.key);
+            data = res.data;
+            count = res.count;
+            return { newData, count, index, data };
         } catch (error) {
             return Promise.reject(error);
         }
@@ -530,30 +551,8 @@ export default class Serializer {
         }
     }
 
-    protected async autoIndex(path: string, data: any) {
-        try {
-            if (isObject(data)) {
-                const dataArr = Object.entries(data);
-                for (const arr of dataArr) {
-                    const field = arr[0];
-                    const value = arr[1];
-                    path = this.toWildCardPath(path);
-                    if (isObject(value)) {
-                        await this.autoIndex(path + "/" + field, value);
-                    } else if (Array.isArray(value)) {
-                        this.acebase.indexes.create(path, field, {
-                            type: "array",
-                        });
-                    } else {
-                        this.acebase.indexes.create(path, field);
-                    }
-                }
-            }
-            return Promise.resolve(true);
-        } catch (error) {
-            return Promise.reject(error);
-        }
-    }
+    //TODO: instead of reexecuting query if there is same live query it get keys from the other one
+    protected findMatchingQuery() {}
 
     protected toWildCardPath(ref: string) {
         return ref
@@ -572,16 +571,24 @@ export default class Serializer {
         return ref;
     }
 
-    protected async Query(
+    async Query(
         transaction: any,
-        server: { req?: Request; res?: Response }
-    ): Promise<{ data: any[]; count: number }> {
+        server: { req?: Request; res?: Response },
+        propagation?: {
+            data: RealtimeQueryEvent;
+            count_cache: number;
+            data_cache: { key: string; rev_ticks: number }[];
+            type: "add" | "update" | "destroy";
+        }
+    ): Promise<{ data: any[]; count: number; updatedData?: any, cache?: { key: string; rev_ticks: number, [any: string]: any }[] }> {
         try {
             const { ref, hook } = transaction;
             if (ref.includes("__users__") || ref.includes("__tokens__")) {
                 return Promise.reject("Error: cannot access secured refferences use  instance.User() instead.");
             }
             let clone = cloneDeep(transaction);
+            let cache: any = []
+            let updatedData: any = {}
             let queryRef = this.acebase.query(ref);
             const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             if (executeHook) {
@@ -590,6 +597,27 @@ export default class Serializer {
                     clone = hookedQuery;
                 }
             }
+            let ignoredExclusions = [];
+            if (clone?.live) {
+                if (clone?.sorts && Array.isArray(clone.sorts) && clone.sorts.length) {
+                    const sortFields = clone.sorts.map((s) => s[0]);
+                    for (const sortField of sortFields) {
+                        if (clone.exclusion && Array.isArray(clone.exclusion)) {
+                            if (clone.exclusion.includes(sortField)) {
+                                clone.exclusion = clone.exclusion.filter((e) => e != sortField);
+                                ignoredExclusions = [...ignoredExclusions, sortField];
+                            }
+                        }
+                        if (clone.inclusion && Array.isArray(clone.inclusion)) {
+                            if (!clone.inclusion.includes(sortField)) {
+                                clone.inclusion.push(sortField);
+                                ignoredExclusions = [...ignoredExclusions, sortField];
+                            }
+                        }
+                    }
+                }
+            }
+            ignoredExclusions = uniq(ignoredExclusions);
             queryRef = this.applyFilters(clone, queryRef);
             const { aggregates, limit, exclusion, inclusion } = clone;
             let count = 0;
@@ -728,7 +756,6 @@ export default class Serializer {
                         if (typeof avg != "number" || avg == NaN) {
                             //throw error
                         }
-
                         if (!groups[group]) groups[group] = {};
                         if (op == "AVG") groups[group][alias] = avg;
                         if (op == "COUNT") groups[group][alias] = count;
@@ -740,34 +767,72 @@ export default class Serializer {
                     });
                 }
             } else {
-                if(transaction?.compoundFilter?.length){
-                    let compoundResult = await this.compound(transaction)
-                    data = compoundResult.data
-                    count = compoundResult.count
-                }else{
-                    if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
-                        if (exclusion?.length && inclusion?.length) {
-                            data = (
-                                await queryRef.get({
-                                    exclude: exclusion,
-                                    include: inclusion,
-                                })
-                            ).map((snap) => snap.val());
-                        } else if (exclusion?.length) {
-                            data = (await queryRef.get({ exclude: exclusion })).map((snap) => snap.val());
-                        } else if (inclusion?.length) {
-                            data = (await queryRef.get({ include: inclusion })).map((snap) => snap.val());
+                if (transaction?.compoundFilter?.length) {
+                    let compoundResult = await this.compound(transaction);
+                    data = compoundResult.data;
+                    count = compoundResult.count;
+                } else {
+                    if (isObject(propagation) && !isDate(propagation) && propagation.data_cache.length) {
+                        const { count_cache, data_cache, type } = propagation;
+                        let propagationData: any = null;
+                        let propagation_data_path: string = "";
+                        let propagate_data_ref: DataReference = null;
+                        if (propagation?.data?.snapshot) {
+                            propagate_data_ref = propagation.data.snapshot.ref;
+                            propagationData = (await propagate_data_ref.get()).val();
+                        } else {
+                            propagate_data_ref = propagation?.data?.ref;
+                            propagationData = (await propagate_data_ref.get()).val();
+                            propagation_data_path = propagate_data_ref.path;
                         }
+                        if (type == "update") {
+                            const oldCachedData = data_cache.find((dc) => dc.key == propagationData.key);
+                            const lastFetched = new Date(oldCachedData.rev_ticks);
+                            const changes = (await propagate_data_ref.getChanges(lastFetched)).changes
+                            const updated_values = changes[changes.length-1]
+                            const isValueSorted = Object.keys(updated_values).some((field) =>
+                                ignoredExclusions.includes(field)
+                            );
+                            const oldIndex = data_cache.findIndex((dc) => propagationData.key == dc.key);
+                            if (data_cache.length < limit) {
+                            } else {
+                                if (isValueSorted) {
+                                    let newKeysSortOrder = [...data_cache];
+                                    newKeysSortOrder[oldIndex] = propagationData;
+                                    const sortingKeys = clone.sorts.map((t) => t[0]);
+                                    const sortingValues = clone.sorts.map((t) => (t[1] ? "asc" : "desc"));
+                                    newKeysSortOrder = orderBy(newKeysSortOrder, sortingKeys, sortingValues);
+                                    const newIndex = newKeysSortOrder.findIndex((d) => d.key == propagationData.key);
+                                    //if updated data getting out of range
+                                    if (newIndex == 0) {
+                                        let tempNewData = {}
+                                    } else if (newIndex == (limit - 1)){
+                                        
+                                    } else {
+
+                                    }
+                                } else {
+                                }
+                            }
+                        }
+                        //get the difference
                     } else {
-                        data = (await queryRef.get()).map((snap) => snap.val());
+                        data = (await queryRef.get({ exclude: exclusion, include: inclusion })).map((snap) =>
+                            snap.val()
+                        );
+                        queryRef.take(Infinity);
+                        count = await queryRef.count();
                     }
-                    queryRef.take(Infinity);
-                    count = await queryRef.count();
                 }
             }
-            //! todo return decorated data
             if (executeHook) {
-                const afterHookData = this.ExecuteHook("afterFind", ref, { data, count }, server?.req, server?.res);
+                const afterHookData = await this.ExecuteHook(
+                    "afterFind",
+                    ref,
+                    { data, count },
+                    server?.req,
+                    server?.res
+                );
                 if (Array.isArray(afterHookData?.data) && isNumber(afterHookData?.count)) {
                     return {
                         data: afterHookData.data,
@@ -775,7 +840,7 @@ export default class Serializer {
                     };
                 }
             }
-            return { data, count };
+            return { data, count ,cache,updatedData };
         } catch (error) {
             if (error?.message.startsWith("Error: This wildcard path query on"))
                 return Promise.resolve({ data: [], count: 0 });
@@ -783,42 +848,33 @@ export default class Serializer {
         }
     }
 
-    async compound(transaction) {
+    async compound(transaction, propagate?: boolean) {
         try {
             let queryResults = [];
-            let keys = []
+            let keys = [];
             let count = 0;
             for (const filter of transaction.compoundFilter) {
                 let tempQuery = this.acebase.query(transaction.ref);
                 tempQuery = this.applyFilters(transaction, tempQuery);
-                let resultkeys = queryResults.map(qr=>qr.key)
-                if(queryResults.length && resultkeys.length ){
-                    tempQuery.filter("key","!in",resultkeys)
+                let resultkeys = queryResults.map((qr) => qr.key);
+                if (queryResults.length && resultkeys.length) {
+                    tempQuery.filter("key", "!in", resultkeys);
                 }
                 tempQuery.filter(filter[0], filter[1], filter[2]);
-                keys = uniq([...keys, ...(await tempQuery.find()).map(dr=>dr.key)]) 
-                count += await tempQuery.take(Infinity).count()
+                keys = uniq([...keys, ...(await tempQuery.find()).map((dr) => dr.key)]);
+                count += await tempQuery.take(Infinity).count();
             }
             const { exclusion, inclusion } = transaction;
-            if ((Array.isArray(exclusion) && exclusion.length) || (Array.isArray(inclusion) && inclusion.length)) {
-                if (exclusion?.length && inclusion?.length) {
-                    queryResults = (await Promise.all(keys.map(key=>{
-                        return this.acebase.ref(transaction.ref + "/" + key).get({ include: inclusion,exclude: exclusion })
-                    }))).map(ds=>ds.val())
-                } else if (exclusion?.length) {
-                    queryResults = (await Promise.all(keys.map(key=>{
-                        return this.acebase.ref(transaction.ref + "/" + key).get({ exclude: exclusion })
-                    }))).map(ds=>ds.val())
-                } else if (inclusion?.length) {
-                    queryResults = (await Promise.all(keys.map(key=>{
-                        return this.acebase.ref(transaction.ref + "/" + key).get({include: inclusion })
-                    }))).map(ds=>ds.val())
-                }
-            } else {
-                queryResults = (await Promise.all(keys.map(key=>{
-                    return this.acebase.ref(transaction.ref + "/" + key).get()
-                }))).map(ds=>ds.val())
-            }
+
+            queryResults = (
+                await Promise.all(
+                    keys.map((key) => {
+                        return this.acebase
+                            .ref(transaction.ref + "/" + key)
+                            .get({ include: inclusion, exclude: exclusion });
+                    })
+                )
+            ).map((ds) => ds.val());
             if (transaction?.sorts?.length) {
                 const sortingKeys = transaction.sorts.map((t) => t[0]);
                 const sortingValues = transaction.sorts.map((t) => (t[1] ? "asc" : "desc"));
@@ -826,7 +882,7 @@ export default class Serializer {
             } else {
                 queryResults = orderBy(queryResults, ["rev_ticks", "asc"]);
             }
-            queryResults =  queryResults.slice(0,transaction?.limit)
+            queryResults = queryResults.slice(0, transaction?.limit);
             return Promise.resolve({ data: queryResults, count });
         } catch (error) {
             return Promise.reject(error);
@@ -881,6 +937,7 @@ export default class Serializer {
             });
         }
         if (Array.isArray(payload?.sorts)) {
+            //if sorted with a field that is excluded in the result ignores
             payload.sorts.forEach((s) => {
                 if (s.length > 1) queryRef.sort(s[0], s[1]);
                 else queryRef.sort(s[0]);

@@ -33,7 +33,7 @@
     "typescript": "^4.5.4"
   },
   "dependencies": {
-    "acebase": "^1.15.0",
+    "acebase": "github:paradis-A/acebase#731d2dd6d18aba80fe0cd29cd9ffc99b804f649d",
     "chalk": "^5.0.0",
     "cuid": "^2.1.8",
     "dayjs": "^1.10.7",

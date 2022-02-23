@@ -325,7 +325,6 @@ class Serializer {
             }
             const hook = eventHandles?.hook;
             const emit = eventHandles?.emit;
-            const queue = eventHandles?.queue;
             const executeHook = hook == undefined || (typeof hook == "boolean" && hook);
             const executeEmit = emit == undefined || (typeof emit == "boolean" && emit);
             let data = this.getData(Object.assign({}, transaction));
@@ -341,7 +340,6 @@ class Serializer {
             if (executeHook) {
                 const hookData = await this.ExecuteHook(event.before, hookRef, data, server?.req, server?.res, user);
                 if (hookData && (0, lodash_1.isObject)(hookData) && !(0, lodash_1.isDate)(hookData)) {
-                    console.log(hookData);
                     Object.assign(data, hookData);
                 }
             }
@@ -356,12 +354,11 @@ class Serializer {
                     data[entry[0]] = new Date(entry[1]);
                 }
             }
-            this.ProcessLink(refference, key, data);
-            await this.ProcessLink(ref, key, data);
+            data.rev_ticks = Date.now();
             if (exists)
-                instance.update(data);
+                await instance.update(data);
             else
-                instance.set(data);
+                await instance.set(data);
             if (!singular) {
                 let indexes = await this.acebase.indexes.get();
                 if (!indexes.find((i) => {
@@ -373,15 +370,6 @@ class Serializer {
             let returnData = (await instance.get()).val();
             if (executeHook) {
                 await this.ExecuteHook(event.after, hookRef, returnData, server?.req, server?.res, user);
-            }
-            //! access level permission when emitting for client side
-            if (executeEmit) {
-                if (exists) {
-                    this.emitter.emit("update:" + hookRef, returnData);
-                }
-                else {
-                    this.emitter.emit("add:" + hookRef, returnData);
-                }
             }
             return Promise.resolve(returnData);
         }

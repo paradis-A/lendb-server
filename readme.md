@@ -1,5 +1,5 @@
 ### Powered by:  [Acebase](https://github.com/appy-one/acebase)
-`LenDB Server` is a wrapper around another database called Acebase that acts like a client. Think of it as parse-server and firebase had baby then voilah!!! `Hello World!!` LenDB is born.
+`LenDB Server` is a wrapper around another database called Acebase that acts like a client. Think of it as parse-server and acebase (alternative to firebase) had baby then voilah!!! `Hello World!!` LenDB is born.
 
 `LenDB Server` is a real-time database alternative to *Firebase* but instead of listening and receive the updated row/node, Stored objects in LenDB Server upon changes it auto propagates the changes on your live data. Although LenDB is like `yet another database wrapper(actually not)`, With LenDB Browser Client, LenDB is designed for reactive front-end frameworks like Svelte. etc.
 
@@ -23,12 +23,13 @@ await db.start(5757,"localhost") // params are options and will default to 5757 
 The above code will start create or load if exists an acebase database in your root directory named  with the name of `my_db.acebase`.
 
 **Options**
-As much as possible we want to serve the data across clients and servers with the fastest available server available (quite elegant) for node.js the why to serve the database, the http and ws runs on top of [hyper-express](https://www.npmjs.com/package/hyper-express) an ala'h express wrapper of the fastest websocket server for node.js [uWebsocket.js](https://github.com/uNetworking/uWebSockets.js/).
-Basically  upon starting the server the only option can be supplied as argument is the port and host. 
+As much as possible we want to serve the data across clients and servers with the fastest available server available (quite elegant) for node.js the why to serve the database, the http and ws runs on top of [hyper-express](https://www.npmjs.com/package/hyper-express).
+
+Basically upon starting the server the only option can be supplied as argument is the port and host. 
 ```javascript
 db.start(my_port,my_host)
 ```
-But if you want to extend either work like adding routes or middlewares to  hyper-express instance before starting.
+But if you want to extend either work like adding routes or middlewares to  hyper-express. You can optionally add endpoints before calling .start().
 ```javascript
 db.Server.post("/my_custom_endpont",(req,res)=>{
 	res.status(418)//I'm a teapot
@@ -232,7 +233,6 @@ db.hook.beforeAdd("persons",async (data, req,res)=>{
 	db.hook.afterFind("persons",(data,req,res)=>{
 		//LOGIC GOES HERE
 	})
-
 ```
 
 ## AUTH (todo)
@@ -240,8 +240,13 @@ db.hook.beforeAdd("persons",async (data, req,res)=>{
 
 Checkout [Acebase](https://github.com/appy-one/acebase) the best Firebase alternative that you can host in your premises.
 
+**Plans for Research and Development**
+ - Gun.js storage adapter (peer to peer replication)
+ - Third Party Storage like AWS S3
+ - DBaaS featuring  [Acebase](https://github.com/appy-one/acebase)
+
 **Disclaimer**
-This is current at early development stage. You are responsible if you use it in production as this early stage.
+This is current at early development stage. You are responsible for your action, if you use it in production as this early stage of development.
 
 **Sponsoring**
 Let me know if you using LenDB. Please consider donating to this project, Help me buy my own `Laptop`.

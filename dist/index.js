@@ -71,6 +71,8 @@ class LenDB {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
+                    let data_cache = [];
+                    let count_cache = 0;
                     let queryRef;
                     const payload = JSON.parse(payloadData);
                     let transaction;
@@ -108,10 +110,10 @@ class LenDB {
                         }));
                     });
                     if (payload?.reconnect == true) {
-                        queryRef.get({ exclude: ["*"] });
+                        queryRef.get({ include: ["key", "rev_ticks"] });
                     }
                     else {
-                        queryRef.get({ exclude: ["*"] });
+                        queryRef.get({ exclude: ["key", "rev_ticks"] });
                         let queryResult = await this.Serializer.Execute(transaction);
                         let data = queryResult.data || [];
                         let count = queryResult.count || 0;
@@ -132,7 +134,7 @@ class LenDB {
                 //! todo close the connection when it does not ping for certain time
             }
             catch (error) {
-                console.log(error);
+                console.log({ error: true, message: "Error" });
             }
         });
         this.Server.post("/ping", async (req, res) => {
@@ -211,7 +213,7 @@ class LenDB {
             }
             catch (error) {
                 res.status(403);
-                res.json({ message: error });
+                res.json({ error: true, message: error });
             }
         });
         this.Server.get("/uploads/*", async (req, res) => {
@@ -239,7 +241,7 @@ class LenDB {
                 }
             }
             catch (error) {
-                res.end(error);
+                res.json({ error: true, message: "Error" });
             }
         });
         this.Server.post("/lenDB_upload", async (req, res) => {

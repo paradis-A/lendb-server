@@ -35,6 +35,8 @@ export class LenDB {
     }[] = [];
     constructor(appname: string, settings?: AceBaseLocalSettings, serverOptions?: { uploadPath: string }) {
         this.Server = new HyperExpress.Server({ max_body_length: Infinity });
+        settings.transactions.log = true
+        settings.transactions.maxAge = Infinity
         this.acebase = new AceBase(appname, settings);
         this.auth = new Auth(this.acebase);
         this.emitter = new Emittery();
@@ -91,22 +93,17 @@ export class LenDB {
             try {
                 let subscriptionKey = null;
                 ws.on("message", async (payloadData) => {
+                    let data_cache: {key: string, rev_ticks: number}[] = []
+                    let count_cache: number =  0;
                     let queryRef: DataReferenceQuery;
                     const payload = JSON.parse(payloadData);
-                    let transaction: {
-                        skip: number;
-                        limit: number;
-                        page: number;
-                        exclusion: string[];
-                        inclusion: string[];
-                        sort: any[];
-                        filters: any[];
-                        ref: string;
-                    };
+                    let transaction: any = {}
                     subscriptionKey = payload?.subscriptionKey;
                     transaction = payload?.query;
                     queryRef = this.Serializer.applyFilters(transaction, this.acebase.query(transaction.ref));
                     queryRef.on("add", async (realtimeQueryEvent) => {
+                        //todo cache the sorted first and last value
+                        //todo added value is inside the range execute propagation
                         const { data, index, count, newData } = await this.Serializer.LivePayload(
                             transaction,
                             realtimeQueryEvent
@@ -121,11 +118,14 @@ export class LenDB {
                             })
                         );
                     });
+
                     queryRef.on("change", async (realtimeQueryEvent) => {
+                         //check if updated data is in the range if not then dont proceed
                         const { data, index, count, newData } = await this.Serializer.LivePayload(
                             transaction,
                             realtimeQueryEvent
                         );
+
                         ws.send(
                             JSON.stringify({
                                 type: "update",
@@ -137,6 +137,7 @@ export class LenDB {
                         );
                     });
                     queryRef.on("remove", async (realtimeQueryEvent) => {
+                        //check if updated data is in the range if not then dont proceed
                         const { data, index, count, newData } = await this.Serializer.LivePayload(
                             transaction,
                             realtimeQueryEvent
@@ -152,9 +153,9 @@ export class LenDB {
                         );
                     });
                     if (payload?.reconnect == true) {
-                        queryRef.get({exclude: ["*"]})
+                        queryRef.get({include: ["key","rev_ticks"]})
                     } else {
-                        queryRef.get({exclude: ["*"]})
+                        queryRef.get({include: ["key","rev_ticks"]})
                         let queryResult = await this.Serializer.Execute(transaction)
                         let data = queryResult.data || [];
                         let count = queryResult.count || 0;
@@ -174,10 +175,10 @@ export class LenDB {
                 });
                 //! todo close the connection when it does not ping for certain time
             } catch (error) {
-                console.log(error);
+                console.log({error: true, message: "Error"});
             }
         });
-        
+
         this.Server.post("/ping", async (req, res) => {
             res.json({ pong: true });
         });
@@ -245,7 +246,7 @@ export class LenDB {
                 }
             } catch (error) {
                 res.status(403);
-                res.json({ message: error });
+                res.json({error: true, message: error});
             }
         });
 
@@ -273,7 +274,7 @@ export class LenDB {
                     res.json((await file.get()).val());
                 }
             } catch (error) {
-                res.end(error);
+                res.json({error: true, message: "Error"});
             }
         });
 
